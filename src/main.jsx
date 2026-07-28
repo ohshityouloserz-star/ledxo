@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import ReactDOM from "react-dom/client";
-import { Check, X, Plus, ChevronLeft, ChevronRight, Flame, Settings2, Trash2, Clock } from "lucide-react";
+import { Check, X, Plus, ChevronLeft, ChevronRight, Flame, Settings2, Trash2, Clock, ChevronDown } from "lucide-react";
 
 if (!window.storage) {
   window.storage = {
@@ -85,6 +85,9 @@ function StudyLedger() {
   // Time calculation for day/night background change (4 PM to 3 AM is Night)
   const currentHour = now.getHours();
   const isNight = currentHour >= 16 || currentHour < 3;
+  
+  // Format to 12-hour AM/PM clock
+  const displayTime = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
 
   useEffect(() => {
     let cancelled = false;
@@ -221,7 +224,7 @@ function StudyLedger() {
       
       const dayTotal = tasks.length;
       const dayAchieved = tasks.filter((t) => t.status === "achieved").length;
-      const uncompleted = dayTotal - dayAchieved;
+      const uncompleted = dayTotal - dayAchieved; // Exactly how many are pending
 
       tasks.forEach((t) => {
         total += 1;
@@ -230,12 +233,12 @@ function StudyLedger() {
       });
 
       // Minimum productivity 🐇: at least half complete (50%+)
-      if (dayTotal > 0 && dayAchieved / dayTotal >= 0.5) {
+      if (dayTotal > 0 && (dayAchieved / dayTotal) >= 0.5) {
         minProdDays += 1;
       }
 
-      // Maximum productivity 🐢: only 1, 2, or 3 tasks left uncompleted
-      if (uncompleted >= 1 && uncompleted <= 3) {
+      // Maximum productivity 🐢: exactly 1, 2, or 3 tasks pending
+      if (dayTotal > 0 && uncompleted >= 1 && uncompleted <= 3) {
         maxProdDays += 1;
       }
     });
@@ -247,28 +250,30 @@ function StudyLedger() {
     };
   }, [targetsByDay, today]);
 
-  const climberPct = Math.min(94, Math.max(6, overall.rate));
+  const climberPct = Math.min(100, Math.max(0, overall.rate));
 
   return (
     <div style={{
       fontFamily: "'Plus Jakarta Sans', sans-serif",
-      background: isNight ? "#1C1A27" : "#E5E1EE",
+      backgroundColor: isNight ? "#12101A" : "#D4C5ED",
       minHeight: "100vh",
       color: isNight ? "#F0EDF6" : "#211F33",
       position: "relative",
-      overflow: "hidden",
-      transition: "background 1s ease"
+      overflowX: "hidden",
+      scrollBehavior: "smooth"
     }}>
       <style>{`
         ${FONT_IMPORT}
+        body { margin: 0; padding: 0; }
         .kw-card {
-          background: ${isNight ? "#28253B" : "#F7F5FC"};
+          background: ${isNight ? "rgba(40, 37, 59, 0.7)" : "rgba(247, 245, 252, 0.7)"};
           border: 2px solid ${isNight ? "#484360" : "#211F33"};
           border-radius: 20px;
-          box-shadow: 4px 4px 0px ${isNight ? "#12101A" : "#211F33"};
+          box-shadow: 4px 4px 0px ${isNight ? "rgba(18, 16, 26, 0.8)" : "rgba(33, 31, 51, 0.8)"};
+          backdrop-filter: blur(8px);
         }
         .kw-input {
-          background: ${isNight ? "#1F1D2B" : "#EDE8F5"};
+          background: ${isNight ? "rgba(31, 29, 43, 0.8)" : "rgba(237, 232, 245, 0.8)"};
           border: 2px solid ${isNight ? "#484360" : "#211F33"};
           border-radius: 12px;
           padding: 10px 14px;
@@ -277,7 +282,7 @@ function StudyLedger() {
         }
         .kw-input::placeholder { color: ${isNight ? "#787293" : "#8F8AA8"}; }
         .kw-select {
-          background: ${isNight ? "#1F1D2B" : "#EDE8F5"};
+          background: ${isNight ? "rgba(31, 29, 43, 0.8)" : "rgba(237, 232, 245, 0.8)"};
           border: 2px solid ${isNight ? "#484360" : "#211F33"};
           border-radius: 10px;
           padding: 6px 10px;
@@ -294,259 +299,296 @@ function StudyLedger() {
           50%, 95% { transform: rotate(180deg); }
           100% { transform: rotate(360deg); }
         }
+        @keyframes bounceScroll {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(10px); }
+        }
         .hg-animated {
           display: inline-block;
           animation: flipHourglass 4s infinite ease-in-out;
         }
+        .bounce-icon {
+          animation: bounceScroll 2s infinite ease-in-out;
+        }
       `}</style>
 
-      {/* Dynamic Animated Mountain Background */}
+      {/* Dramatic Manga-Inspired Full Screen Fixed Background */}
       <svg
         aria-hidden="true"
-        style={{ position: "fixed", left: 0, bottom: 0, width: "100%", height: "55vh", zIndex: 0, pointerEvents: "none", transition: "all 1s ease" }}
-        viewBox="0 0 1000 620"
-        preserveAspectRatio="none"
+        style={{ position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", zIndex: 0, objectFit: "cover", transition: "all 1s ease" }}
+        viewBox="0 0 1000 1000"
+        preserveAspectRatio="xMidYMax slice"
       >
         <defs>
           <pattern id="tone" width="8" height="8" patternUnits="userSpaceOnUse">
             <image href={TONE_SVG} width="8" height="8" />
           </pattern>
         </defs>
-        <polygon points="0,320 180,210 380,310 600,180 820,290 1000,220 1000,620 0,620" fill={isNight ? "#2C2742" : "#7E779A"} opacity="0.4" />
-        <polygon points="0,410 220,280 440,360 680,240 880,340 1000,280 1000,620 0,620" fill={isNight ? "#181524" : "#3D3854"} />
-        <polygon points="0,410 220,280 440,360 680,240 880,340 1000,280 1000,620 0,620" fill="url(#tone)" opacity="0.4" />
-        <polygon points="0,490 140,380 280,450 420,330 560,430 720,320 860,430 1000,360 1000,620 0,620" fill={isNight ? "#0D0B14" : "#211F33"} />
+        <rect width="1000" height="1000" fill={isNight ? "#1C1A27" : "#E5E1EE"} />
+        <polygon points="-100,600 200,250 450,550 700,100 1100,600 1100,1000 -100,1000" fill={isNight ? "#2C2742" : "#7E779A"} opacity="0.4" />
+        <polygon points="-50,750 300,400 550,600 850,250 1100,650 1100,1000 -50,1000" fill={isNight ? "#181524" : "#3D3854"} />
+        <polygon points="-50,750 300,400 550,600 850,250 1100,650 1100,1000 -50,1000" fill="url(#tone)" opacity="0.4" />
+        <polygon points="-100,900 150,600 350,750 600,450 850,750 1100,500 1100,1000 -100,1000" fill={isNight ? "#0D0B14" : "#211F33"} />
       </svg>
 
-      <div style={{ position: "relative", zIndex: 1, maxWidth: 600, margin: "0 auto", padding: "24px 16px 60px" }}>
+      <div style={{ position: "relative", zIndex: 1 }}>
         
-        {/* ADHD Friendly Live Timer Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-          <div className="kw-card" style={{ padding: "6px 14px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600 }}>
-            <span className="hg-animated">⏳</span>
-            <span>{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-          </div>
-          <button onClick={() => setShowSettings((s) => !s)} className="kw-card" style={{ padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center" }}>
-            <Settings2 size={16} />
-          </button>
-        </div>
-
-        {/* Settings Panel */}
-        {showSettings && (
-          <div className="kw-card" style={{ padding: 18, marginBottom: 18 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Exam Settings</div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <input
-                value={examConfig.name}
-                onChange={(e) => setExamConfig((c) => ({ ...c, name: e.target.value }))}
-                onBlur={() => saveExamConfig(examConfig)}
-                placeholder="Exam Name"
-                className="kw-input"
-                style={{ flex: 1 }}
-              />
-              <input
-                type="date"
-                value={examConfig.date}
-                onChange={(e) => {
-                  const cfg = { ...examConfig, date: e.target.value };
-                  setExamConfig(cfg);
-                  saveExamConfig(cfg);
-                }}
-                className="kw-input"
-              />
+        {/* 100vh Hero Screen (Just Timer & Scroll indicator) */}
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "24px 16px", boxSizing: "border-box" }}>
+          <div style={{ width: "100%", maxWidth: 600, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div className="kw-card" style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 700 }}>
+              <span className="hg-animated">⏳</span>
+              <span>{displayTime}</span>
             </div>
+            <button onClick={() => setShowSettings((s) => !s)} className="kw-card" style={{ padding: "10px", cursor: "pointer", display: "flex", alignItems: "center" }}>
+              <Settings2 size={18} />
+            </button>
           </div>
-        )}
 
-        {/* Stats Grid */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-          <div className="kw-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, display: "flex", alignItems: "center", gap: 4 }}>
-              <Flame size={12} color="#D9822B" /> STREAK
+          {/* Settings Panel (Pops over hero if active) */}
+          {showSettings && (
+            <div className="kw-card" style={{ maxWidth: 600, width: "100%", margin: "20px auto 0", padding: 18 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Exam Settings</div>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <input
+                  value={examConfig.name}
+                  onChange={(e) => setExamConfig((c) => ({ ...c, name: e.target.value }))}
+                  onBlur={() => saveExamConfig(examConfig)}
+                  placeholder="Exam Name"
+                  className="kw-input"
+                  style={{ flex: 1 }}
+                />
+                <input
+                  type="date"
+                  value={examConfig.date}
+                  onChange={(e) => {
+                    const cfg = { ...examConfig, date: e.target.value };
+                    setExamConfig(cfg);
+                    saveExamConfig(cfg);
+                  }}
+                  className="kw-input"
+                />
+              </div>
             </div>
-            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{streak}d</div>
-          </div>
-          <div className="kw-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>COMPLETION</div>
-            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{overall.rate}%</div>
-          </div>
-          <div className="kw-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MAXIMUM PRODUCTIVITY 🐢</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "#489A6A", marginTop: 4 }}>{overall.maxProdDays}</div>
-            <div style={{ fontSize: 10, opacity: 0.6 }}>1-3 tasks pending</div>
-          </div>
-          <div className="kw-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MINIMUM PRODUCTIVITY 🐇</div>
-            <div style={{ fontSize: 22, fontWeight: 700, color: "#D95D75", marginTop: 4 }}>{overall.minProdDays}</div>
-            <div style={{ fontSize: 10, opacity: 0.6 }}>≥50% completed</div>
+          )}
+
+          <div style={{ flex: 1 }} />
+          
+          <div style={{ textAlign: "center", paddingBottom: 40, opacity: 0.8, color: isNight ? "#D4C5ED" : "#FFF", textShadow: "0px 2px 4px rgba(0,0,0,0.5)" }}>
+            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.1em", marginBottom: 8 }}>SCROLL TO CLIMB</div>
+            <div className="bounce-icon"><ChevronDown size={32} margin="0 auto" /></div>
           </div>
         </div>
 
-        {/* Climb Progress Bar */}
-        <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 12 }}>YOUR CLIMB</div>
-          <div style={{ position: "relative", height: 16, background: isNight ? "#1F1D2B" : "#EDE8F5", borderRadius: 999, border: `2px solid ${isNight ? "#484360" : "#211F33"}` }}>
-            <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${climberPct}%`, background: "#D4C5ED", borderRadius: 999 }} />
+        {/* Scrollable Main Application Window */}
+        <div style={{
+          background: isNight ? "rgba(22, 20, 31, 0.8)" : "rgba(229, 225, 238, 0.75)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderTop: `2px solid ${isNight ? "#484360" : "#211F33"}`,
+          minHeight: "100vh",
+          padding: "40px 16px 80px",
+          boxShadow: "0px -10px 40px rgba(0,0,0,0.3)"
+        }}>
+          <div style={{ maxWidth: 600, margin: "0 auto" }}>
             
-            {/* Dynamic Climber & Summit Emoji */}
-            {climberPct >= 94 ? (
-              <div style={{ position: "absolute", right: 6, top: -14, fontSize: 18 }}>🚩</div>
-            ) : (
-              <>
-                <div style={{ position: "absolute", left: `calc(${climberPct}% - 12px)`, top: -14, fontSize: 18 }}>🧗🏻‍♀️</div>
-                <div style={{ position: "absolute", right: 6, top: -14, fontSize: 18 }}>🏔️</div>
-              </>
-            )}
-          </div>
-          <div style={{ fontSize: 10, opacity: 0.6, textAlign: "right", marginTop: 8 }}>
-            base camp — — — — — summit
-          </div>
-        </div>
+            {/* Stats Grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
+              <div className="kw-card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, display: "flex", alignItems: "center", gap: 4 }}>
+                  <Flame size={12} color="#D9822B" /> STREAK
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{streak}d</div>
+              </div>
+              <div className="kw-card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>COMPLETION</div>
+                <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{overall.rate}%</div>
+              </div>
+              <div className="kw-card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MAX PRODUCTIVITY 🐢</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "#489A6A", marginTop: 6 }}>{overall.maxProdDays}</div>
+                <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>1-3 tasks pending</div>
+              </div>
+              <div className="kw-card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MIN PRODUCTIVITY 🐇</div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "#D95D75", marginTop: 6 }}>{overall.minProdDays}</div>
+                <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>≥50% completed</div>
+              </div>
+            </div>
 
-        {/* Last 14 Days Container with Fixed Alignment */}
-        <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 12 }}>LAST 14 DAYS</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(14, 1fr)", gap: 4 }}>
-            {last14.map((d) => {
-              const isSelected = d.key === viewKey;
-              return (
+            {/* Climb Progress Bar */}
+            <div className="kw-card" style={{ padding: 18, marginBottom: 20 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 20 }}>YOUR CLIMB</div>
+              <div style={{ position: "relative", height: 18, background: isNight ? "rgba(31, 29, 43, 0.8)" : "rgba(237, 232, 245, 0.8)", borderRadius: 999, border: `2px solid ${isNight ? "#484360" : "#211F33"}` }}>
+                
+                {/* The Filled Progress Line */}
+                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${climberPct}%`, background: "#D4C5ED", borderRadius: 999, transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1)" }}>
+                  
+                  {/* Climber / Flag anchored to the exact right edge of the fill */}
+                  {climberPct === 100 ? (
+                    <div style={{ position: "absolute", right: -10, top: -16, fontSize: 22, textShadow: "2px 2px 0px rgba(0,0,0,0.2)" }}>🚩</div>
+                  ) : (
+                    <div style={{ position: "absolute", right: -12, top: -16, fontSize: 22, zIndex: 2 }}>🧗🏻‍♀️</div>
+                  )}
+                </div>
+
+                {/* The Mountain Summit fixed at the far right */}
+                {climberPct < 100 && (
+                  <div style={{ position: "absolute", right: 2, top: -16, fontSize: 22, opacity: 0.8, zIndex: 1 }}>🏔️</div>
+                )}
+              </div>
+              <div style={{ fontSize: 10, opacity: 0.6, textAlign: "right", marginTop: 10 }}>
+                base camp — — — — — summit
+              </div>
+            </div>
+
+            {/* Last 14 Days Navigation */}
+            <div className="kw-card" style={{ padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 14 }}>LAST 14 DAYS</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(14, 1fr)", gap: 4 }}>
+                {last14.map((d) => {
+                  const isSelected = d.key === viewKey;
+                  return (
+                    <button
+                      key={d.key}
+                      onClick={() => setViewDate(fromKey(d.key))}
+                      style={{
+                        background: isSelected ? (isNight ? "#FFF" : "#211F33") : (isNight ? "rgba(31, 29, 43, 0.8)" : "rgba(237, 232, 245, 0.8)"),
+                        color: isSelected ? (isNight ? "#211F33" : "#FFF") : (isNight ? "#FFF" : "#211F33"),
+                        border: `1.5px solid ${isNight ? "#484360" : "#211F33"}`,
+                        borderRadius: 6,
+                        height: 28,
+                        width: "100%",
+                        fontSize: 11,
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        padding: 0,
+                        boxShadow: isSelected ? "1px 1px 0px rgba(0,0,0,0.3)" : "none"
+                      }}
+                    >
+                      {d.date.getDate()}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Notes Section */}
+            <div className="kw-card" style={{ padding: 16, marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7, marginBottom: 8 }}>Notes</div>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                onBlur={() => saveNotes(notes)}
+                placeholder="Add quick notes or reminders here..."
+                rows={2}
+                style={{ width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "inherit", fontFamily: "inherit", fontSize: 13, lineHeight: "1.5" }}
+              />
+            </div>
+
+            {/* Current Day Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <button onClick={() => setViewDate((d) => addDays(d, -1))} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
+                <ChevronLeft size={24} />
+              </button>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>
+                {isToday ? "Today" : dayLabel(viewDate)}
+              </div>
+              <button onClick={() => setViewDate((d) => addDays(d, 1))} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
+                <ChevronRight size={24} />
+              </button>
+            </div>
+
+            {/* Task Input Form */}
+            <div className="kw-card" style={{ padding: 18, marginBottom: 20 }}>
+              <input
+                value={newTaskText}
+                onChange={(e) => setNewTaskText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addTask()}
+                placeholder="hurry up set your targets MORIKO!"
+                className="kw-input"
+                style={{ width: "100%", marginBottom: 14, boxSizing: "border-box", fontSize: 14 }}
+              />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <Clock size={16} opacity={0.7} />
+                  <select value={newStart} onChange={(e) => setNewStart(e.target.value)} className="kw-select" style={{ fontSize: 13 }}>
+                    <option value="">--</option>
+                    {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <span style={{ fontSize: 12, opacity: 0.6 }}>–</span>
+                  <select value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="kw-select" style={{ fontSize: 13 }}>
+                    <option value="">--</option>
+                    {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
                 <button
-                  key={d.key}
-                  onClick={() => setViewDate(fromKey(d.key))}
+                  onClick={addTask}
                   style={{
-                    background: isSelected ? (isNight ? "#FFF" : "#211F33") : (isNight ? "#1F1D2B" : "#EDE8F5"),
-                    color: isSelected ? (isNight ? "#211F33" : "#FFF") : (isNight ? "#FFF" : "#211F33"),
-                    border: `1.5px solid ${isNight ? "#484360" : "#211F33"}`,
-                    borderRadius: 6,
-                    height: 26,
-                    width: "100%",
-                    fontSize: 10,
+                    background: "#D4C5ED",
+                    border: "2px solid #211F33",
+                    color: "#211F33",
+                    borderRadius: 12,
+                    padding: "10px 18px",
                     fontWeight: 700,
+                    fontSize: 14,
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    padding: 0
+                    gap: 6,
+                    boxShadow: "2px 2px 0px #211F33"
                   }}
                 >
-                  {d.date.getDate()}
+                  <Plus size={16} /> Add
                 </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Notes Card - Placed right before TODAY section */}
-        <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7, marginBottom: 6 }}>Notes</div>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            onBlur={() => saveNotes(notes)}
-            placeholder="Add quick notes or reminders here..."
-            rows={2}
-            style={{ width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "inherit", fontFamily: "inherit", fontSize: 13 }}
-          />
-        </div>
-
-        {/* Day Navigation */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <button onClick={() => setViewDate((d) => addDays(d, -1))} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
-            <ChevronLeft size={20} />
-          </button>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>
-            {isToday ? "Today" : dayLabel(viewDate)}
-          </div>
-          <button onClick={() => setViewDate((d) => addDays(d, 1))} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
-            <ChevronRight size={20} />
-          </button>
-        </div>
-
-        {/* Task Form */}
-        <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
-          <input
-            value={newTaskText}
-            onChange={(e) => setNewTaskText(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addTask()}
-            placeholder="hurry up set your targets MORIKO!"
-            className="kw-input"
-            style={{ width: "100%", marginBottom: 12, boxSizing: "border-box" }}
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Clock size={14} opacity={0.7} />
-              <select value={newStart} onChange={(e) => setNewStart(e.target.value)} className="kw-select" style={{ fontSize: 12 }}>
-                <option value="">--</option>
-                {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-              <span style={{ fontSize: 12, opacity: 0.6 }}>–</span>
-              <select value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="kw-select" style={{ fontSize: 12 }}>
-                <option value="">--</option>
-                {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <button
-              onClick={addTask}
-              style={{
-                background: "#D4C5ED",
-                border: "2px solid #211F33",
-                color: "#211F33",
-                borderRadius: 12,
-               padding: "8px 16px",
-                fontWeight: 700,
-                fontSize: 13,
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 4,
-                boxShadow: "2px 2px 0px #211F33"
-              }}
-            >
-              <Plus size={14} /> Add
-            </button>
-          </div>
-        </div>
-
-        {/* Task List */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-          {currentTasks.map((t) => (
-            <div key={t.id} className="kw-card" style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <button
-                  onClick={() => setStatus(t.id, "achieved")}
-                  style={{ background: t.status === "achieved" ? "#489A6A" : "transparent", border: `2px solid ${isNight ? "#FFF" : "#211F33"}`, borderRadius: 6, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  {t.status === "achieved" && <Check size={14} color="#FFF" />}
-                </button>
-                <button
-                  onClick={() => setStatus(t.id, "missed")}
-                  style={{ background: t.status === "missed" ? "#D95D75" : "transparent", border: `2px solid ${isNight ? "#FFF" : "#211F33"}`, borderRadius: 6, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
-                >
-                  {t.status === "missed" && <X size={14} color="#FFF" />}
-                </button>
-                <div>
-                  <div style={{ fontSize: 14, textDecoration: t.status === "achieved" ? "line-through" : "none", opacity: t.status === "achieved" ? 0.6 : 1 }}>
-                    {t.text}
-                  </div>
-                  {(t.start || t.end) && (
-                    <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>
-                      {t.start && t.end ? `${t.start} – ${t.end}` : t.start || t.end}
-                    </div>
-                  )}
-                </div>
               </div>
-              <button onClick={() => removeTask(t.id)} style={{ background: "none", border: "none", opacity: 0.6, cursor: "pointer", color: "inherit" }}>
-                <Trash2 size={14} />
-              </button>
             </div>
-          ))}
-        </div>
 
-        {/* Footer Quote */}
-        <div style={{ textAlign: "center", fontSize: 12, opacity: 0.6, fontStyle: "italic", marginTop: 20 }}>
-          "a climber only fails when he stops climbing" ~ Mori
-        </div>
+            {/* Task List */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 30 }}>
+              {currentTasks.map((t) => (
+                <div key={t.id} className="kw-card" style={{ padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <button
+                      onClick={() => setStatus(t.id, "achieved")}
+                      style={{ background: t.status === "achieved" ? "#489A6A" : "transparent", border: `2px solid ${isNight ? "#FFF" : "#211F33"}`, borderRadius: 8, width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                    >
+                      {t.status === "achieved" && <Check size={16} color="#FFF" />}
+                    </button>
+                    <button
+                      onClick={() => setStatus(t.id, "missed")}
+                      style={{ background: t.status === "missed" ? "#D95D75" : "transparent", border: `2px solid ${isNight ? "#FFF" : "#211F33"}`, borderRadius: 8, width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                    >
+                      {t.status === "missed" && <X size={16} color="#FFF" />}
+                    </button>
+                    <div>
+                      <div style={{ fontSize: 15, fontWeight: 500, textDecoration: t.status === "achieved" ? "line-through" : "none", opacity: t.status === "achieved" ? 0.6 : 1 }}>
+                        {t.text}
+                      </div>
+                      {(t.start || t.end) && (
+                        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
+                          {t.start && t.end ? `${t.start} – ${t.end}` : t.start || t.end}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <button onClick={() => removeTask(t.id)} style={{ background: "none", border: "none", opacity: 0.5, cursor: "pointer", color: "inherit" }}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
 
+            {/* Footer Quote */}
+            <div style={{ textAlign: "center", fontSize: 12, opacity: 0.5, fontStyle: "italic" }}>
+              "a climber only fails when he stops climbing" ~ Mori
+            </div>
+
+          </div>
+        </div>
       </div>
     </div>
   );
