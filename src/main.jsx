@@ -48,12 +48,15 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-const TIME_OPTIONS = [];
+// 12-Hour Time Options with AM / PM
+const TIME_OPTIONS_12H = [];
 for (let i = 0; i < 24; i++) {
   for (let j = 0; j < 60; j += 30) {
-    const hh = String(i).padStart(2, "0");
+    const hour12 = i % 12 === 0 ? 12 : i % 12;
+    const ampm = i < 12 ? "AM" : "PM";
     const mm = String(j).padStart(2, "0");
-    TIME_OPTIONS.push(`${hh}:${mm}`);
+    const hh = String(hour12).padStart(2, "0");
+    TIME_OPTIONS_12H.push(`${hh}:${mm} ${ampm}`);
   }
 }
 
@@ -83,9 +86,13 @@ function StudyLedger() {
   const [newEnd, setNewEnd] = useState("");
   const [now, setNow] = useState(new Date());
 
-  // Custom Pomodoro Timer State
-  const [customHours, setCustomHours] = useState(0);
-  const [customMins, setCustomMins] = useState(25);
+  // Custom Pomodoro Timer State (Focus & Break)
+  const [timerType, setTimerType] = useState("focus"); // "focus" or "break"
+  const [focusHours, setFocusHours] = useState(0);
+  const [focusMins, setFocusMins] = useState(25);
+  const [breakHours, setBreakHours] = useState(0);
+  const [breakMins, setBreakMins] = useState(5);
+
   const [pomoTime, setPomoTime] = useState(25 * 60);
   const [pomoActive, setPomoActive] = useState(false);
 
@@ -97,21 +104,55 @@ function StudyLedger() {
     return () => clearInterval(id);
   }, []);
 
+  // Phone Vibration Alert Handler
+  const triggerVibration = () => {
+    if (typeof window !== "undefined" && "navigator" in window && navigator.vibrate) {
+      navigator.vibrate([300, 150, 300, 150, 500]);
+    }
+  };
+
   // Pomodoro Countdown Handler
   useEffect(() => {
     let timer = null;
     if (pomoActive && pomoTime > 0) {
       timer = setInterval(() => setPomoTime((prev) => prev - 1), 1000);
-    } else if (pomoTime === 0) {
+    } else if (pomoTime === 0 && pomoActive) {
       setPomoActive(false);
+      triggerVibration();
     }
     return () => clearInterval(timer);
   }, [pomoActive, pomoTime]);
 
-  const applyCustomTimer = (h, m) => {
-    const totalSeconds = (parseInt(h || 0, 10) * 3600) + (parseInt(m || 0, 10) * 60);
-    setPomoTime(totalSeconds);
+  const switchTimerMode = (type) => {
+    setTimerType(type);
     setPomoActive(false);
+    if (type === "focus") {
+      const sec = (parseInt(focusHours || 0, 10) * 3600) + (parseInt(focusMins || 0, 10) * 60);
+      setPomoTime(sec);
+    } else {
+      const sec = (parseInt(breakHours || 0, 10) * 3600) + (parseInt(breakMins || 0, 10) * 60);
+      setPomoTime(sec);
+    }
+  };
+
+  const updateFocusTime = (h, m) => {
+    setFocusHours(h);
+    setFocusMins(m);
+    if (timerType === "focus") {
+      const sec = (parseInt(h || 0, 10) * 3600) + (parseInt(m || 0, 10) * 60);
+      setPomoTime(sec);
+      setPomoActive(false);
+    }
+  };
+
+  const updateBreakTime = (h, m) => {
+    setBreakHours(h);
+    setBreakMins(m);
+    if (timerType === "break") {
+      const sec = (parseInt(h || 0, 10) * 3600) + (parseInt(m || 0, 10) * 60);
+      setPomoTime(sec);
+      setPomoActive(false);
+    }
   };
 
   const formatPomoTime = (totalSec) => {
@@ -276,16 +317,11 @@ function StudyLedger() {
       const dayAchieved = tasks.filter((t) => t.status === "achieved").length;
       const rate = dayTotal > 0 ? (dayAchieved / dayTotal) * 100 : 0;
 
-      // Tier 1: 90% or above (or 100%)
       if (rate >= 90) {
         maxProdDays += 1;
-      } 
-      // Tier 2: Above 50% and strictly under 90%
-      else if (rate > 50 && rate < 90) {
+      } else if (rate > 50 && rate < 90) {
         inBetweenDays += 1;
-      } 
-      // Tier 3: Less than or equal to 50%
-      else if (rate <= 50) {
+      } else if (rate <= 50) {
         minProdDays += 1;
       }
     });
@@ -320,7 +356,7 @@ function StudyLedger() {
   return (
     <div style={{
       fontFamily: "'Plus Jakarta Sans', sans-serif",
-      backgroundColor: "#1D1B26",
+      backgroundColor: "#1B1726",
       minHeight: "100vh",
       color: "#F3EFF8",
       position: "relative",
@@ -328,24 +364,19 @@ function StudyLedger() {
     }}>
       <style>{`
         ${FONT_IMPORT}
-        body { margin: 0; padding: 0; background: #1D1B26; }
+        body { margin: 0; padding: 0; background: #1B1726; }
         
-        @keyframes floatCloud {
-          0%, 100% { transform: translateX(0px); }
-          50% { transform: translateX(20px); }
-        }
-
         .kw-card {
-          background: rgba(42, 38, 58, 0.45);
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          background: rgba(38, 32, 52, 0.55);
+          border: 1px solid rgba(255, 255, 255, 0.15);
           border-radius: 24px;
-          box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.25);
+          box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.3);
           backdrop-filter: blur(20px);
           -webkit-backdrop-filter: blur(20px);
         }
         .kw-input {
-          background: rgba(28, 26, 40, 0.7);
-          border: 1.5px solid rgba(255, 255, 255, 0.15);
+          background: rgba(24, 20, 34, 0.8);
+          border: 1.5px solid rgba(255, 255, 255, 0.18);
           border-radius: 14px;
           padding: 12px 16px;
           color: #FFF;
@@ -353,68 +384,43 @@ function StudyLedger() {
         }
         .kw-input::placeholder { color: #A09A8F; }
         .kw-select {
-          background: rgba(28, 26, 40, 0.7);
-          border: 1.5px solid rgba(255, 255, 255, 0.15);
+          background: rgba(24, 20, 34, 0.8);
+          border: 1.5px solid rgba(255, 255, 255, 0.18);
           border-radius: 10px;
           padding: 6px 10px;
           color: #FFF;
           font-family: inherit;
-          appearance: none;
         }
         .time-num-input {
-          background: rgba(0,0,0,0.25);
-          border: 1px solid rgba(255,255,255,0.2);
+          background: rgba(0,0,0,0.35);
+          border: 1px solid rgba(255,255,255,0.22);
           color: #FFF;
           border-radius: 8px;
-          width: 44px;
+          width: 40px;
           padding: 4px;
           text-align: center;
           font-family: inherit;
           font-weight: 700;
+          font-size: 12px;
         }
       `}</style>
 
-      {/* Cute Pinterest/Canva-Style Soft Mountain Background */}
-      <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
-        <svg
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          viewBox="0 0 1000 1000"
-          preserveAspectRatio="xMidYMid slice"
-        >
-          <defs>
-            <linearGradient id="cuteSky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#312B42" />
-              <stop offset="50%" stopColor="#5B486B" />
-              <stop offset="100%" stopColor="#A8829F" />
-            </linearGradient>
-            <linearGradient id="softMtn1" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#806282" />
-              <stop offset="100%" stopColor="#4A3B52" />
-            </linearGradient>
-            <linearGradient id="softMtn2" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#55425C" />
-              <stop offset="100%" stopColor="#2E2436" />
-            </linearGradient>
-            <linearGradient id="softMtn3" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3B2E42" />
-              <stop offset="100%" stopColor="#1D1B26" />
-            </linearGradient>
-          </defs>
-
-          {/* Sky Gradient */}
-          <rect width="1000" height="1000" fill="url(#cuteSky)" />
-
-          {/* Cute Soft Floating Clouds (No Big Circle) */}
-          <path d="M 100 250 Q 130 210 170 230 Q 210 200 250 230 Q 280 250 260 280 H 110 Z" fill="#F4E3ED" opacity="0.2" style={{ animation: "floatCloud 14s ease-in-out infinite" }} />
-          <path d="M 680 320 Q 710 280 760 300 Q 800 270 840 310 Q 870 330 850 360 H 670 Z" fill="#F4E3ED" opacity="0.25" style={{ animation: "floatCloud 18s ease-in-out infinite reverse" }} />
-
-          {/* Pinterest Rounded Mountain Peaks */}
-          <path d="M -50 1000 Q 200 480 450 1000 Z" fill="url(#softMtn1)" opacity="0.85" />
-          <path d="M 300 1000 Q 600 420 880 1000 Z" fill="url(#softMtn1)" opacity="0.75" />
-          <path d="M 120 1000 Q 420 540 720 1000 Z" fill="url(#softMtn2)" />
-          <path d="M -100 1000 Q 180 620 520 1000 Z" fill="url(#softMtn3)" />
-          <path d="M 480 1000 Q 780 640 1100 1000 Z" fill="url(#softMtn3)" />
-        </svg>
+      {/* Photorealistic Pastel Liminal Mountain Background */}
+      <div style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 0,
+        pointerEvents: "none",
+        backgroundImage: "url('https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=1920&q=80')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        filter: "brightness(0.65) saturate(0.85) contrast(0.9)",
+      }}>
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          background: "linear-gradient(180deg, rgba(45, 34, 60, 0.75) 0%, rgba(35, 27, 48, 0.85) 50%, rgba(20, 16, 28, 0.95) 100%)",
+        }} />
       </div>
 
       <div style={{ position: "relative", zIndex: 1 }}>
@@ -422,15 +428,15 @@ function StudyLedger() {
         {/* HERO SECTION */}
         <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "30px 16px 40px", boxSizing: "border-box" }}>
           
-          {/* TOP SMALL LIVE CLOCK & CUSTOM POMODORO TIMER */}
-          <div style={{ width: "100%", maxWidth: 440, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+          {/* TOP LIVE CLOCK & CUSTOM POMODORO TIMER */}
+          <div style={{ width: "100%", maxWidth: 460, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             
-            {/* Small Live Clock (12-Hour AM/PM) */}
+            {/* Live Clock (12-Hour AM/PM) */}
             <div style={{
-              background: "rgba(0,0,0,0.3)",
-              border: "1px solid rgba(255,255,255,0.15)",
+              background: "rgba(0,0,0,0.35)",
+              border: "1px solid rgba(255,255,255,0.18)",
               borderRadius: 20,
-              padding: "6px 16px",
+              padding: "6px 18px",
               fontSize: 13,
               fontWeight: 700,
               letterSpacing: "0.05em",
@@ -440,61 +446,89 @@ function StudyLedger() {
               {formatLiveClock(now)}
             </div>
 
-            {/* Main Pomodoro Card */}
-            <div className="kw-card" style={{ width: "100%", padding: "20px 24px", textAlign: "center", border: "1px solid rgba(255,255,255,0.2)", background: "rgba(30, 26, 42, 0.55)" }}>
+            {/* Custom Focus & Break Pomodoro Card */}
+            <div className="kw-card" style={{ width: "100%", padding: "20px 20px", textAlign: "center", border: "1px solid rgba(255,255,255,0.2)", background: "rgba(30, 25, 42, 0.65)" }}>
               
-              {/* Custom Hours & Minutes Controls */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 14 }}>
-                <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>Focus Set:</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="24"
-                  value={customHours}
-                  onChange={(e) => {
-                    const h = Math.max(0, parseInt(e.target.value || 0, 10));
-                    setCustomHours(h);
-                    applyCustomTimer(h, customMins);
-                  }}
-                  className="time-num-input"
-                />
-                <span style={{ fontSize: 11, opacity: 0.6 }}>h</span>
-                <input
-                  type="number"
-                  min="0"
-                  max="59"
-                  value={customMins}
-                  onChange={(e) => {
-                    const m = Math.max(0, parseInt(e.target.value || 0, 10));
-                    setCustomMins(m);
-                    applyCustomTimer(customHours, m);
-                  }}
-                  className="time-num-input"
-                />
-                <span style={{ fontSize: 11, opacity: 0.6 }}>m</span>
+              {/* Type Switcher */}
+              <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 14 }}>
                 <button
-                  onClick={() => {
-                    setCustomHours(0);
-                    setCustomMins(25);
-                    applyCustomTimer(0, 25);
+                  onClick={() => switchTimerMode("focus")}
+                  style={{
+                    background: timerType === "focus" ? "#F2C6DE" : "rgba(255,255,255,0.08)",
+                    color: timerType === "focus" ? "#161521" : "#FFF",
+                    border: "none",
+                    borderRadius: 20,
+                    padding: "6px 16px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer"
                   }}
-                  style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#FFF", borderRadius: 8, padding: "4px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer", marginLeft: 4 }}
                 >
-                  Reset 25m
+                  Focus Session
+                </button>
+                <button
+                  onClick={() => switchTimerMode("break")}
+                  style={{
+                    background: timerType === "break" ? "#82C99B" : "rgba(255,255,255,0.08)",
+                    color: timerType === "break" ? "#161521" : "#FFF",
+                    border: "none",
+                    borderRadius: 20,
+                    padding: "6px 16px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer"
+                  }}
+                >
+                  Break Time
                 </button>
               </div>
 
-              {/* Countdown Timer Display */}
-              <div style={{ fontSize: 58, fontWeight: 800, letterSpacing: "0.04em", fontFamily: "monospace", textShadow: "0px 4px 20px rgba(0,0,0,0.3)", color: "#FFF" }}>
+              {/* Time Inputs */}
+              {timerType === "focus" ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>Set Focus:</span>
+                  <input
+                    type="number" min="0" max="24" value={focusHours}
+                    onChange={(e) => updateFocusTime(Math.max(0, parseInt(e.target.value || 0, 10)), focusMins)}
+                    className="time-num-input"
+                  />
+                  <span style={{ fontSize: 10, opacity: 0.6 }}>h</span>
+                  <input
+                    type="number" min="0" max="59" value={focusMins}
+                    onChange={(e) => updateFocusTime(focusHours, Math.max(0, parseInt(e.target.value || 0, 10)))}
+                    className="time-num-input"
+                  />
+                  <span style={{ fontSize: 10, opacity: 0.6 }}>m</span>
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 12 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>Set Break:</span>
+                  <input
+                    type="number" min="0" max="24" value={breakHours}
+                    onChange={(e) => updateBreakTime(Math.max(0, parseInt(e.target.value || 0, 10)), breakMins)}
+                    className="time-num-input"
+                  />
+                  <span style={{ fontSize: 10, opacity: 0.6 }}>h</span>
+                  <input
+                    type="number" min="0" max="59" value={breakMins}
+                    onChange={(e) => updateBreakTime(breakHours, Math.max(0, parseInt(e.target.value || 0, 10)))}
+                    className="time-num-input"
+                  />
+                  <span style={{ fontSize: 10, opacity: 0.6 }}>m</span>
+                </div>
+              )}
+
+              {/* Countdown Display */}
+              <div style={{ fontSize: 56, fontWeight: 800, letterSpacing: "0.04em", fontFamily: "monospace", textShadow: "0px 4px 20px rgba(0,0,0,0.4)", color: "#FFF" }}>
                 {formatPomoTime(pomoTime)}
               </div>
 
-              {/* Timer Controls */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 12 }}>
+              {/* Controls */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 10 }}>
                 <button
                   onClick={() => setPomoActive(!pomoActive)}
                   style={{
-                    background: "#F2C6DE",
+                    background: timerType === "focus" ? "#F2C6DE" : "#82C99B",
                     color: "#161521",
                     border: "none",
                     borderRadius: 999,
@@ -504,13 +538,13 @@ function StudyLedger() {
                     alignItems: "center",
                     justifyContent: "center",
                     cursor: "pointer",
-                    boxShadow: "0px 4px 14px rgba(242, 198, 222, 0.4)"
+                    boxShadow: "0px 4px 14px rgba(0,0,0,0.3)"
                   }}
                 >
                   {pomoActive ? <Pause size={20} fill="#161521" /> : <Play size={20} fill="#161521" style={{ marginLeft: 2 }} />}
                 </button>
                 <button
-                  onClick={() => applyCustomTimer(customHours, customMins)}
+                  onClick={() => switchTimerMode(timerType)}
                   style={{
                     background: "rgba(255,255,255,0.1)",
                     color: "#FFF",
@@ -530,7 +564,7 @@ function StudyLedger() {
             </div>
           </div>
 
-          {/* 12-Month Interactive Calendar */}
+          {/* 12-Month Calendar */}
           <div className="kw-card" style={{ width: "100%", maxWidth: 360, padding: 22, margin: "20px 0" }}>
             
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -604,17 +638,17 @@ function StudyLedger() {
           <div style={{ height: 10 }}></div>
         </div>
 
-        {/* Scrollable Main Dashboard */}
+        {/* Dashboard Section */}
         <div style={{
-          background: "rgba(22, 21, 33, 0.92)",
+          background: "rgba(20, 16, 28, 0.94)",
           borderTop: "1px solid rgba(255,255,255,0.1)",
           minHeight: "100vh",
           padding: "40px 16px 80px",
-          boxShadow: "0px -10px 40px rgba(0,0,0,0.4)"
+          boxShadow: "0px -10px 40px rgba(0,0,0,0.5)"
         }}>
           <div style={{ maxWidth: 600, margin: "0 auto" }}>
             
-            {/* Streak & Productivity Metrics Grid (3 Tiers) */}
+            {/* Streak & Metrics Grid */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
               <div className="kw-card" style={{ padding: 16, gridColumn: "span 2" }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, display: "flex", alignItems: "center", gap: 4 }}>
@@ -634,17 +668,18 @@ function StudyLedger() {
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#F3C68F", marginTop: 4 }}>{overall.inBetweenDays}</div>
                 <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>&gt; 50% &amp; &lt; 90%</div>
               </div>
-<div className="kw-card" style={{ padding: 16, gridColumn: "span 2" }}>
+
+              <div className="kw-card" style={{ padding: 16, gridColumn: "span 2" }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MIN PRODUCTIVITY 🐇</div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: "#E86F88", marginTop: 4 }}>{overall.minProdDays}</div>
                 <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>≤ 50% completed</div>
               </div>
             </div>
 
-            {/* Climb Progress Bar with Rate of Completion directly under Climber Emoji */}
+            {/* Climb Progress Bar */}
             <div className="kw-card" style={{ padding: 18, marginBottom: 20 }}>
               <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 24 }}>TODAY'S CLIMB</div>
-              <div style={{ position: "relative", height: 18, background: "rgba(20, 18, 30, 0.6)", borderRadius: 999, border: "1.5px solid rgba(255,255,255,0.15)", marginBottom: 28 }}>
+              <div style={{ position: "relative", height: 18, background: "rgba(12, 10, 18, 0.7)", borderRadius: 999, border: "1.5px solid rgba(255,255,255,0.15)", marginBottom: 28 }}>
                 <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${climberPct}%`, background: "#F2C6DE", borderRadius: 999, transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1)" }}>
                   
                   {climberPct === 100 ? (
@@ -652,8 +687,19 @@ function StudyLedger() {
                   ) : (
                     <div style={{ position: "absolute", right: -12, top: -16, fontSize: 22, zIndex: 2 }}>
                       🧗🏻‍♀️
-                      {/* Live Completion Rate under Climber */}
-                      <div style={{ fontSize: 11, fontWeight: 800, color: "#F2C6DE", textAlign: "center", position: "absolute", top: 24, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap" }}>
+                      {/* High Contrast Color for Rate of Completion */}
+                      <div style={{
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: "#FFE885",
+                        textAlign: "center",
+                        position: "absolute",
+                        top: 24,
+                        left: "50%",
+                        transform: "translateX(-50%)",
+                        whiteSpace: "nowrap",
+                        textShadow: "0px 2px 4px rgba(0,0,0,0.9)"
+                      }}>
                         {overall.rate}%
                       </div>
                     </div>
@@ -666,10 +712,16 @@ function StudyLedger() {
               </div>
             </div>
 
-            {/* Last 14 Days Navigation */}
-            <div className="kw-card" style={{ padding: 16, marginBottom: 20 }}>
+            {/* FIXED ALIGNMENT: Last 14 Days Section */}
+            <div className="kw-card" style={{ padding: 18, marginBottom: 20 }}>
               <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 14 }}>LAST 14 DAYS</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(14, 1fr)", gap: 4 }}>
+              <div style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(7, 1fr)",
+                gap: 8,
+                justifyContent: "center",
+                alignItems: "center"
+              }}>
                 {last14.map((d) => {
                   const isSelected = d.key === viewKey;
                   return (
@@ -677,15 +729,19 @@ function StudyLedger() {
                       key={d.key}
                       onClick={() => setViewDate(fromKey(d.key))}
                       style={{
-                        background: isSelected ? "#FFF" : "rgba(28, 26, 40, 0.7)",
+                        background: isSelected ? "#FFF" : "rgba(32, 27, 44, 0.8)",
                         color: isSelected ? "#161521" : "#FFF",
-                        border: "1px solid rgba(255,255,255,0.15)",
-                        borderRadius: 6,
-                        height: 28,
+                        border: isSelected ? "1px solid #FFF" : "1px solid rgba(255,255,255,0.12)",
+                        borderRadius: 8,
+                        aspectRatio: "1/1",
                         width: "100%",
-                        fontSize: 11,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 12,
                         fontWeight: 700,
                         cursor: "pointer",
+                        padding: 0
                       }}
                     >
                       {d.date.getDate()}
@@ -719,7 +775,7 @@ function StudyLedger() {
               </button>
             </div>
 
-            {/* Task Input Form */}
+            {/* Task Input Form with AM/PM Support */}
             <div className="kw-card" style={{ padding: 18, marginBottom: 20 }}>
               <input
                 value={newTaskText}
@@ -732,14 +788,14 @@ function StudyLedger() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <Clock size={16} opacity={0.7} />
-                  <select value={newStart} onChange={(e) => setNewStart(e.target.value)} className="kw-select" style={{ fontSize: 13 }}>
-                    <option value="">--</option>
-                    {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  <select value={newStart} onChange={(e) => setNewStart(e.target.value)} className="kw-select" style={{ fontSize: 12 }}>
+                    <option value="">Start</option>
+                    {TIME_OPTIONS_12H.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                   <span style={{ fontSize: 12, opacity: 0.6 }}>–</span>
-                  <select value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="kw-select" style={{ fontSize: 13 }}>
-                    <option value="">--</option>
-                    {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  <select value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="kw-select" style={{ fontSize: 12 }}>
+                    <option value="">End</option>
+                    {TIME_OPTIONS_12H.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
                 <button
@@ -805,10 +861,9 @@ function StudyLedger() {
           </div>
         </div>
       </div>
-
-      {/* Expanded Notes Modal */}
+    {/* Expanded Notes Modal */}
       {showNotesModal && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "rgba(22, 21, 33, 0.88)", backdropFilter: "blur(16px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "rgba(20, 16, 28, 0.9)", backdropFilter: "blur(16px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
           <div className="kw-card" style={{ width: "100%", maxWidth: 600, height: "80vh", display: "flex", flexDirection: "column", padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ fontSize: 16, fontWeight: 800 }}>Notes</div>
