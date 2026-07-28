@@ -459,4 +459,69 @@ function StudyLedger() {
             onKeyDown={(e) => e.key === "Enter" && addTask()}
             placeholder="Add a target..."
             className="kw-input"
-            style={{ width: "100%", background: "#F1EEFA", border: "2px solid #2B2A3D", borderRadius: 10, padding: "8px 12px", color: "#2B2A3D", fontSize: 13, marginBottom: 8, boxSizing: "border-box
+            style={{ width: "100%", background: "#F1EEFA", border: "2px solid #2B2A3D", borderRadius: 10, padding: "8px 12px", color: "#2B2A3D", fontSize: 13, marginBottom: 8, boxSizing: "border-box" }}
+          />
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="time"
+              value={newStart}
+              onChange={(e) => setNewStart(e.target.value)}
+              style={{ background: "#F1EEFA", border: "2px solid #2B2A3D", borderRadius: 8, padding: "4px 8px", fontSize: 11 }}
+            />
+            <span style={{ fontSize: 11, color: "#6E6B8A" }}>to</span>
+            <input
+              type="time"
+              value={newEnd}
+              onChange={(e) => setNewEnd(e.target.value)}
+              style={{ background: "#F1EEFA", border: "2px solid #2B2A3D", borderRadius: 8, padding: "4px 8px", fontSize: 11 }}
+            />
+            <button onClick={addTask} className="kw-btn" style={{ marginLeft: "auto", background: "#2B2A3D", color: "#FFF", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              <Plus size={14} /> Add
+            </button>
+          </div>
+        </div>
+
+        {/* Task List */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {currentTasks.map((t) => (
+            <div key={t.id} className="kw-card" style={{ padding: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <button
+                  onClick={() => setStatus(t.id, "achieved")}
+                  style={{ background: t.status === "achieved" ? "#5FAE83" : "#F1EEFA", border: "2px solid #2B2A3D", borderRadius: 6, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                >
+                  {t.status === "achieved" && <Check size={14} color="#FFF" />}
+                </button>
+                <button
+                  onClick={() => setStatus(t.id, "missed")}
+                  style={{ background: t.status === "missed" ? "#E8768E" : "#F1EEFA", border: "2px solid #2B2A3D", borderRadius: 6, width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                >
+                  {t.status === "missed" && <X size={14} color="#FFF" />}
+                </button>
+                <div>
+                  <div style={{ fontSize: 14, textDecoration: t.status === "achieved" ? "line-through" : "none", color: t.status === "achieved" ? "#9C97B8" : "#2B2A3D" }}>
+                    {t.text}
+                  </div>
+                  {formatBracket(t) && (
+                    <div style={{ fontSize: 10, color: "#6E6B8A", display: "flex", alignItems: "center", gap: 3, marginTop: 2 }}>
+                      <Clock size={10} /> {formatBracket(t)}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => removeTask(t.id)} style={{ background: "none", border: "none", color: "#ABA6C4", cursor: "pointer" }}>
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <StudyLedger />
+  </React.StrictMode>
+);
