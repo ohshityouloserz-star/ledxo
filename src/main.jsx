@@ -19,7 +19,7 @@ if (!window.storage) {
 }
 
 const FONT_IMPORT =
-  "@import url('https://fonts.googleapis.com/css2?family=Goudy+Bookletter+1911&family=Playfair+Display:ital,wght@0,400;0,600;1,400&display=swap');";
+  "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');";
 
 function toKey(date) {
   const y = date.getFullYear();
@@ -46,7 +46,6 @@ function uid() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-// Generate time options for dropdowns (e.g. 08:00, 08:30...)
 const TIME_OPTIONS = [];
 for (let i = 0; i < 24; i++) {
   for (let j = 0; j < 60; j += 30) {
@@ -73,7 +72,8 @@ function StudyLedger() {
   const [newEnd, setNewEnd] = useState("");
   const [error, setError] = useState("");
   const [now, setNow] = useState(new Date());
-useEffect(() => {
+
+  useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
@@ -81,6 +81,10 @@ useEffect(() => {
   const today = new Date();
   const viewKey = toKey(viewDate);
   const isToday = isSameDay(viewDate, today);
+
+  // Time calculation for day/night background change (4 PM to 3 AM is Night)
+  const currentHour = now.getHours();
+  const isNight = currentHour >= 16 || currentHour < 3;
 
   useEffect(() => {
     let cancelled = false;
@@ -174,8 +178,6 @@ useEffect(() => {
     updateDay(viewKey, (tasks) => tasks.filter((t) => t.id !== id));
   }
 
-  const dailyMinimum = Math.max(0, Number(examConfig.dailyMinimum) || 0);
-
   const streak = useMemo(() => {
     let count = 0;
     let cursor = new Date(today);
@@ -209,75 +211,99 @@ useEffect(() => {
     }
     return days;
   }, [targetsByDay, today]);
-const overall = useMemo(() => {
-    let total = 0, achieved = 0, missed = 0, perfectDays = 0, belowMinDays = 0, loggedDays = 0;
+
+  const overall = useMemo(() => {
+    let total = 0, achieved = 0, missed = 0, maxProdDays = 0, minProdDays = 0, loggedDays = 0;
     Object.entries(targetsByDay).forEach(([key, tasks]) => {
       if (!tasks || tasks.length === 0) return;
       if (fromKey(key) > today) return;
       loggedDays += 1;
+      
+      const dayTotal = tasks.length;
       const dayAchieved = tasks.filter((t) => t.status === "achieved").length;
+      const uncompleted = dayTotal - dayAchieved;
+
       tasks.forEach((t) => {
         total += 1;
         if (t.status === "achieved") achieved += 1;
         if (t.status === "missed") missed += 1;
       });
-      if (dayAchieved === tasks.length) perfectDays += 1;
-      if (dayAchieved < dailyMinimum) belowMinDays += 1;
+
+      // Minimum productivity 🐇: at least half complete (50%+)
+      if (dayTotal > 0 && dayAchieved / dayTotal >= 0.5) {
+        minProdDays += 1;
+      }
+
+      // Maximum productivity 🐢: only 1, 2, or 3 tasks left uncompleted
+      if (uncompleted >= 1 && uncompleted <= 3) {
+        maxProdDays += 1;
+      }
     });
+
     return {
       total, achieved, missed,
       rate: total ? Math.round((achieved / total) * 100) : 0,
-      perfectDays, belowMinDays, loggedDays,
+      maxProdDays, minProdDays, loggedDays,
     };
-  }, [targetsByDay, today, dailyMinimum]);
-
-  const daysUntilExam = useMemo(() => {
-    if (!examConfig.date) return null;
-    const exam = new Date(examConfig.date + "T00:00:00");
-    return Math.ceil((exam - new Date(toKey(today) + "T00:00:00")) / (1000 * 60 * 60 * 24));
-  }, [examConfig.date, today]);
+  }, [targetsByDay, today]);
 
   const climberPct = Math.min(94, Math.max(6, overall.rate));
 
   return (
-    <div style={{ fontFamily: "'Goudy Bookletter 1911', serif", background: "#E5E1EE", minHeight: "100vh", color: "#211F33", position: "relative", overflow: "hidden" }}>
+    <div style={{
+      fontFamily: "'Plus Jakarta Sans', sans-serif",
+      background: isNight ? "#1C1A27" : "#E5E1EE",
+      minHeight: "100vh",
+      color: isNight ? "#F0EDF6" : "#211F33",
+      position: "relative",
+      overflow: "hidden",
+      transition: "background 1s ease"
+    }}>
       <style>{`
         ${FONT_IMPORT}
-        .kw-serif { font-family: 'Playfair Display', serif; }
         .kw-card {
-          background: #F7F5FC;
-          border: 2px solid #211F33;
+          background: ${isNight ? "#28253B" : "#F7F5FC"};
+          border: 2px solid ${isNight ? "#484360" : "#211F33"};
           border-radius: 20px;
-          box-shadow: 4px 4px 0px #211F33;
+          box-shadow: 4px 4px 0px ${isNight ? "#12101A" : "#211F33"};
         }
         .kw-input {
-          background: #EDE8F5;
-          border: 2px solid #211F33;
+          background: ${isNight ? "#1F1D2B" : "#EDE8F5"};
+          border: 2px solid ${isNight ? "#484360" : "#211F33"};
           border-radius: 12px;
           padding: 10px 14px;
-          color: #211F33;
+          color: ${isNight ? "#FFF" : "#211F33"};
           font-family: inherit;
         }
-        .kw-input::placeholder { color: #8F8AA8; }
+        .kw-input::placeholder { color: ${isNight ? "#787293" : "#8F8AA8"}; }
         .kw-select {
-          background: #EDE8F5;
-          border: 2px solid #211F33;
+          background: ${isNight ? "#1F1D2B" : "#EDE8F5"};
+          border: 2px solid ${isNight ? "#484360" : "#211F33"};
           border-radius: 10px;
           padding: 6px 10px;
-          color: #211F33;
+          color: ${isNight ? "#FFF" : "#211F33"};
           font-family: inherit;
           appearance: none;
-          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23211F33' stroke-width='2'><path d='m6 9 6 6 6-6'/></svg>");
+          background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238F8AA8' stroke-width='2'><path d='m6 9 6 6 6-6'/></svg>");
           background-repeat: no-repeat;
           background-position: right 8px center;
           padding-right: 24px;
         }
+        @keyframes flipHourglass {
+          0%, 45% { transform: rotate(0deg); }
+          50%, 95% { transform: rotate(180deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .hg-animated {
+          display: inline-block;
+          animation: flipHourglass 4s infinite ease-in-out;
+        }
       `}</style>
 
-      {/* Mountain Background Art */}
+      {/* Dynamic Animated Mountain Background */}
       <svg
         aria-hidden="true"
-        style={{ position: "fixed", left: 0, bottom: 0, width: "100%", height: "55vh", zIndex: 0, pointerEvents: "none" }}
+        style={{ position: "fixed", left: 0, bottom: 0, width: "100%", height: "55vh", zIndex: 0, pointerEvents: "none", transition: "all 1s ease" }}
         viewBox="0 0 1000 620"
         preserveAspectRatio="none"
       >
@@ -286,19 +312,21 @@ const overall = useMemo(() => {
             <image href={TONE_SVG} width="8" height="8" />
           </pattern>
         </defs>
-        <polygon points="0,320 180,210 380,310 600,180 820,290 1000,220 1000,620 0,620" fill="#7E779A" opacity="0.4" />
-        <polygon points="0,410 220,280 440,360 680,240 880,340 1000,280 1000,620 0,620" fill="#3D3854" />
+        <polygon points="0,320 180,210 380,310 600,180 820,290 1000,220 1000,620 0,620" fill={isNight ? "#2C2742" : "#7E779A"} opacity="0.4" />
+        <polygon points="0,410 220,280 440,360 680,240 880,340 1000,280 1000,620 0,620" fill={isNight ? "#181524" : "#3D3854"} />
         <polygon points="0,410 220,280 440,360 680,240 880,340 1000,280 1000,620 0,620" fill="url(#tone)" opacity="0.4" />
-        <polygon points="0,490 140,380 280,450 420,330 560,430 720,320 860,430 1000,360 1000,620 0,620" fill="#211F33" />
-        <polygon points="420,330 460,360 380,360" fill="#E5E1EE" />
-        <polygon points="720,320 755,348 685,348" fill="#E5E1EE" />
+        <polygon points="0,490 140,380 280,450 420,330 560,430 720,320 860,430 1000,360 1000,620 0,620" fill={isNight ? "#0D0B14" : "#211F33"} />
       </svg>
 
       <div style={{ position: "relative", zIndex: 1, maxWidth: 600, margin: "0 auto", padding: "24px 16px 60px" }}>
         
-        {/* Header Settings Cog */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
-          <button onClick={() => setShowSettings((s) => !s)} className="kw-card" style={{ padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+        {/* ADHD Friendly Live Timer Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <div className="kw-card" style={{ padding: "6px 14px", display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600 }}>
+            <span className="hg-animated">⏳</span>
+            <span>{now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          </div>
+          <button onClick={() => setShowSettings((s) => !s)} className="kw-card" style={{ padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center" }}>
             <Settings2 size={16} />
           </button>
         </div>
@@ -307,7 +335,7 @@ const overall = useMemo(() => {
         {showSettings && (
           <div className="kw-card" style={{ padding: 18, marginBottom: 18 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Exam Settings</div>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <input
                 value={examConfig.name}
                 onChange={(e) => setExamConfig((c) => ({ ...c, name: e.target.value }))}
@@ -330,58 +358,55 @@ const overall = useMemo(() => {
           </div>
         )}
 
-        {/* Notes Card */}
-        <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            onBlur={() => saveNotes(notes)}
-            placeholder="Anything extra — formulas, reminders, thoughts..."
-            rows={2}
-            style={{ width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "#211F33", fontFamily: "inherit", fontSize: 14 }}
-          />
-        </div>
-
-        {/* Grid Stats */}
+        {/* Stats Grid */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
           <div className="kw-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", fontWeight: 700, color: "#6C6785", display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, display: "flex", alignItems: "center", gap: 4 }}>
               <Flame size={12} color="#D9822B" /> STREAK
             </div>
-            <div className="kw-serif" style={{ fontSize: 26, fontStyle: "italic", marginTop: 4 }}>{streak}d</div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{streak}d</div>
           </div>
           <div className="kw-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", fontWeight: 700, color: "#6C6785" }}>COMPLETION</div>
-            <div className="kw-serif" style={{ fontSize: 26, fontStyle: "italic", marginTop: 4 }}>{overall.rate}%</div>
+            <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>COMPLETION</div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{overall.rate}%</div>
           </div>
           <div className="kw-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", fontWeight: 700, color: "#6C6785" }}>PERFECT DAYS</div>
-            <div className="kw-serif" style={{ fontSize: 26, fontStyle: "italic", color: "#489A6A", marginTop: 4 }}>{overall.perfectDays}</div>
-            <div style={{ fontSize: 10, color: "#8F8AA8" }}>of {overall.loggedDays} logged</div>
+            <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MAXIMUM PRODUCTIVITY 🐢</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#489A6A", marginTop: 4 }}>{overall.maxProdDays}</div>
+            <div style={{ fontSize: 10, opacity: 0.6 }}>1-3 tasks pending</div>
           </div>
           <div className="kw-card" style={{ padding: 14 }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", fontWeight: 700, color: "#6C6785" }}>BELOW MINIMUM</div>
-            <div className="kw-serif" style={{ fontSize: 26, fontStyle: "italic", color: "#D95D75", marginTop: 4 }}>{overall.belowMinDays}</div>
-            <div style={{ fontSize: 10, color: "#8F8AA8" }}>days under {dailyMinimum}</div>
+            <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MINIMUM PRODUCTIVITY 🐇</div>
+            <div style={{ fontSize: 22, fontWeight: 700, color: "#D95D75", marginTop: 4 }}>{overall.minProdDays}</div>
+            <div style={{ fontSize: 10, opacity: 0.6 }}>≥50% completed</div>
           </div>
         </div>
 
-        {/* Your Climb Bar */}
+        {/* Climb Progress Bar */}
         <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.1em", fontWeight: 700, color: "#6C6785", marginBottom: 12 }}>YOUR CLIMB</div>
-          <div style={{ position: "relative", height: 16, background: "#EDE8F5", borderRadius: 999, border: "2px solid #211F33" }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 12 }}>YOUR CLIMB</div>
+          <div style={{ position: "relative", height: 16, background: isNight ? "#1F1D2B" : "#EDE8F5", borderRadius: 999, border: `2px solid ${isNight ? "#484360" : "#211F33"}` }}>
             <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${climberPct}%`, background: "#D4C5ED", borderRadius: 999 }} />
-            <div style={{ position: "absolute", left: `calc(${climberPct}% - 12px)`, top: -14, fontSize: 18 }}>🧗</div>
+            
+            {/* Dynamic Climber & Summit Emoji */}
+            {climberPct >= 94 ? (
+              <div style={{ position: "absolute", right: 6, top: -14, fontSize: 18 }}>🚩</div>
+            ) : (
+              <>
+                <div style={{ position: "absolute", left: `calc(${climberPct}% - 12px)`, top: -14, fontSize: 18 }}>🧗🏻‍♀️</div>
+                <div style={{ position: "absolute", right: 6, top: -14, fontSize: 18 }}>🏔️</div>
+              </>
+            )}
           </div>
-          <div style={{ fontSize: 10, color: "#8F8AA8", textAlign: "right", marginTop: 8 }}>
+          <div style={{ fontSize: 10, opacity: 0.6, textAlign: "right", marginTop: 8 }}>
             base camp — — — — — summit
           </div>
         </div>
 
-        {/* Last 14 Days Bar */}
-        <div className="kw-card" style={{ padding: 16, marginBottom: 20 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.1em", fontWeight: 700, color: "#6C6785", marginBottom: 12 }}>LAST 14 DAYS</div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 2 }}>
+        {/* Last 14 Days Container with Fixed Alignment */}
+        <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 12 }}>LAST 14 DAYS</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(14, 1fr)", gap: 4 }}>
             {last14.map((d) => {
               const isSelected = d.key === viewKey;
               return (
@@ -389,18 +414,19 @@ const overall = useMemo(() => {
                   key={d.key}
                   onClick={() => setViewDate(fromKey(d.key))}
                   style={{
-                    background: isSelected ? "#211F33" : "#EDE8F5",
-                    color: isSelected ? "#FFF" : "#211F33",
-                    border: "1.5px solid #211F33",
-                    borderRadius: 8,
-                    width: 22,
-                    height: 22,
-                    fontSize: 9,
+                    background: isSelected ? (isNight ? "#FFF" : "#211F33") : (isNight ? "#1F1D2B" : "#EDE8F5"),
+                    color: isSelected ? (isNight ? "#211F33" : "#FFF") : (isNight ? "#FFF" : "#211F33"),
+                    border: `1.5px solid ${isNight ? "#484360" : "#211F33"}`,
+                    borderRadius: 6,
+                    height: 26,
+                    width: "100%",
+                    fontSize: 10,
                     fontWeight: 700,
                     cursor: "pointer",
                     display: "flex",
                     alignItems: "center",
-                    justifyIn: "center",
+                    justifyContent: "center",
+                    padding: 0
                   }}
                 >
                   {d.date.getDate()}
@@ -410,44 +436,50 @@ const overall = useMemo(() => {
           </div>
         </div>
 
+        {/* Notes Card - Placed right before TODAY section */}
+        <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7, marginBottom: 6 }}>Notes</div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            onBlur={() => saveNotes(notes)}
+            placeholder="Add quick notes or reminders here..."
+            rows={2}
+            style={{ width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "inherit", fontFamily: "inherit", fontSize: 13 }}
+          />
+        </div>
+
         {/* Day Navigation */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <button onClick={() => setViewDate((d) => addDays(d, -1))} style={{ background: "none", border: "none", cursor: "pointer", color: "#211F33" }}>
+          <button onClick={() => setViewDate((d) => addDays(d, -1))} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
             <ChevronLeft size={20} />
           </button>
-          <div className="kw-serif" style={{ fontSize: 20, fontWeight: 600 }}>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>
             {isToday ? "Today" : dayLabel(viewDate)}
           </div>
-          <button onClick={() => setViewDate((d) => addDays(d, 1))} style={{ background: "none", border: "none", cursor: "pointer", color: "#211F33" }}>
+          <button onClick={() => setViewDate((d) => addDays(d, 1))} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit" }}>
             <ChevronRight size={20} />
           </button>
         </div>
 
-        {/* Empty State Banner (Matches image 1) */}
-        {currentTasks.length === 0 && (
-          <div className="kw-card" style={{ padding: "16px 20px", marginBottom: 16, textAlign: "center", color: "#8F8AA8", fontSize: 14 }}>
-            hurry up! set your targets moriko 🐧
-          </div>
-        )}
-
-        {/* Add Target Input Form */}
+        {/* Task Form */}
         <div className="kw-card" style={{ padding: 16, marginBottom: 16 }}>
           <input
             value={newTaskText}
             onChange={(e) => setNewTaskText(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addTask()}
-            placeholder="Add a target..."
+            placeholder="hurry up set your targets MORIKO!"
             className="kw-input"
             style={{ width: "100%", marginBottom: 12, boxSizing: "border-box" }}
           />
           <div style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Clock size={14} color="#6C6785" />
+              <Clock size={14} opacity={0.7} />
               <select value={newStart} onChange={(e) => setNewStart(e.target.value)} className="kw-select" style={{ fontSize: 12 }}>
                 <option value="">--</option>
                 {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
-              <span style={{ fontSize: 12, color: "#8F8AA8" }}>–</span>
+              <span style={{ fontSize: 12, opacity: 0.6 }}>–</span>
               <select value={newEnd} onChange={(e) => setNewEnd(e.target.value)} className="kw-select" style={{ fontSize: 12 }}>
                 <option value="">--</option>
                 {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
@@ -458,8 +490,9 @@ const overall = useMemo(() => {
               style={{
                 background: "#D4C5ED",
                 border: "2px solid #211F33",
+                color: "#211F33",
                 borderRadius: 12,
-                padding: "8px 16px",
+               padding: "8px 16px",
                 fontWeight: 700,
                 fontSize: 13,
                 cursor: "pointer",
@@ -473,35 +506,36 @@ const overall = useMemo(() => {
             </button>
           </div>
         </div>
-   {/* Task Item List */}
+
+        {/* Task List */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
           {currentTasks.map((t) => (
             <div key={t.id} className="kw-card" style={{ padding: 14, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <button
                   onClick={() => setStatus(t.id, "achieved")}
-                  style={{ background: t.status === "achieved" ? "#489A6A" : "#EDE8F5", border: "2px solid #211F33", borderRadius: 6, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  style={{ background: t.status === "achieved" ? "#489A6A" : "transparent", border: `2px solid ${isNight ? "#FFF" : "#211F33"}`, borderRadius: 6, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                 >
                   {t.status === "achieved" && <Check size={14} color="#FFF" />}
                 </button>
                 <button
                   onClick={() => setStatus(t.id, "missed")}
-                  style={{ background: t.status === "missed" ? "#D95D75" : "#EDE8F5", border: "2px solid #211F33", borderRadius: 6, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                  style={{ background: t.status === "missed" ? "#D95D75" : "transparent", border: `2px solid ${isNight ? "#FFF" : "#211F33"}`, borderRadius: 6, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                 >
                   {t.status === "missed" && <X size={14} color="#FFF" />}
                 </button>
                 <div>
-                  <div style={{ fontSize: 14, textDecoration: t.status === "achieved" ? "line-through" : "none", color: t.status === "achieved" ? "#8F8AA8" : "#211F33" }}>
+                  <div style={{ fontSize: 14, textDecoration: t.status === "achieved" ? "line-through" : "none", opacity: t.status === "achieved" ? 0.6 : 1 }}>
                     {t.text}
                   </div>
                   {(t.start || t.end) && (
-                    <div style={{ fontSize: 11, color: "#8F8AA8", marginTop: 2 }}>
+                    <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>
                       {t.start && t.end ? `${t.start} – ${t.end}` : t.start || t.end}
                     </div>
                   )}
                 </div>
               </div>
-              <button onClick={() => removeTask(t.id)} style={{ background: "none", border: "none", color: "#8F8AA8", cursor: "pointer" }}>
+              <button onClick={() => removeTask(t.id)} style={{ background: "none", border: "none", opacity: 0.6, cursor: "pointer", color: "inherit" }}>
                 <Trash2 size={14} />
               </button>
             </div>
@@ -509,7 +543,7 @@ const overall = useMemo(() => {
         </div>
 
         {/* Footer Quote */}
-        <div style={{ textAlign: "center", fontSize: 12, color: "#8F8AA8", fontStyle: "italic", marginTop: 20 }}>
+        <div style={{ textAlign: "center", fontSize: 12, opacity: 0.6, fontStyle: "italic", marginTop: 20 }}>
           "a climber only fails when he stops climbing" ~ Mori
         </div>
 
