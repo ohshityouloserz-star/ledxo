@@ -83,8 +83,9 @@ function StudyLedger() {
   const [newEnd, setNewEnd] = useState("");
   const [now, setNow] = useState(new Date());
 
-  // Pomodoro Timer State
-  const [pomoMode, setPomoMode] = useState("work"); // "work" (25), "short" (5), "long" (15)
+  // Custom Pomodoro Timer State
+  const [customHours, setCustomHours] = useState(0);
+  const [customMins, setCustomMins] = useState(25);
   const [pomoTime, setPomoTime] = useState(25 * 60);
   const [pomoActive, setPomoActive] = useState(false);
 
@@ -107,16 +108,30 @@ function StudyLedger() {
     return () => clearInterval(timer);
   }, [pomoActive, pomoTime]);
 
-  const setTimerMode = (mode, minutes) => {
-    setPomoMode(mode);
-    setPomoTime(minutes * 60);
+  const applyCustomTimer = (h, m) => {
+    const totalSeconds = (parseInt(h || 0, 10) * 3600) + (parseInt(m || 0, 10) * 60);
+    setPomoTime(totalSeconds);
     setPomoActive(false);
   };
 
-  const formatPomoTime = (seconds) => {
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
+  const formatPomoTime = (totalSec) => {
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    
+    if (h > 0) {
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    }
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  const formatLiveClock = (date) => {
+    return date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true
+    });
   };
 
   const today = useMemo(() => new Date(), [now.toDateString()]);
@@ -247,9 +262,11 @@ function StudyLedger() {
     return days;
   }, [targetsByDay, today]);
 
-  // Updated Productivity Metrics Calculations
+  // Strict 3-Tier Non-Overlapping Productivity Metrics
   const overall = useMemo(() => {
-    let maxProdDays = 0, minProdDays = 0;
+    let maxProdDays = 0;
+    let inBetweenDays = 0;
+    let minProdDays = 0;
 
     Object.entries(targetsByDay).forEach(([key, tasks]) => {
       if (!tasks || tasks.length === 0) return;
@@ -257,14 +274,18 @@ function StudyLedger() {
 
       const dayTotal = tasks.length;
       const dayAchieved = tasks.filter((t) => t.status === "achieved").length;
-      const completionRate = dayTotal > 0 ? (dayAchieved / dayTotal) : 0;
+      const rate = dayTotal > 0 ? (dayAchieved / dayTotal) * 100 : 0;
 
-      // 1. Max Productivity: 90% or above (or 100%) tasks completed
-      if (completionRate >= 0.90) {
+      // Tier 1: 90% or above (or 100%)
+      if (rate >= 90) {
         maxProdDays += 1;
       } 
-      // 2. Min Productivity: <= 50% completed (no overlap possible)
-      else if (completionRate <= 0.50) {
+      // Tier 2: Above 50% and strictly under 90%
+      else if (rate > 50 && rate < 90) {
+        inBetweenDays += 1;
+      } 
+      // Tier 3: Less than or equal to 50%
+      else if (rate <= 50) {
         minProdDays += 1;
       }
     });
@@ -275,7 +296,7 @@ function StudyLedger() {
     const todayAchieved = todaysTasks.filter((t) => t.status === "achieved").length;
     const todayRate = todayTotal ? Math.round((todayAchieved / todayTotal) * 100) : 0;
 
-    return { rate: todayRate, maxProdDays, minProdDays };
+    return { rate: todayRate, maxProdDays, inBetweenDays, minProdDays };
   }, [targetsByDay, today]);
 
   const climberPct = Math.min(100, Math.max(0, overall.rate));
@@ -299,7 +320,7 @@ function StudyLedger() {
   return (
     <div style={{
       fontFamily: "'Plus Jakarta Sans', sans-serif",
-      backgroundColor: "#161521",
+      backgroundColor: "#1D1B26",
       minHeight: "100vh",
       color: "#F3EFF8",
       position: "relative",
@@ -307,20 +328,15 @@ function StudyLedger() {
     }}>
       <style>{`
         ${FONT_IMPORT}
-        body { margin: 0; padding: 0; background: #161521; }
+        body { margin: 0; padding: 0; background: #1D1B26; }
         
-        /* Liminal Live Wallpaper Animations */
         @keyframes floatCloud {
-          0%, 100% { transform: translateX(0px) translateY(0px); }
-          50% { transform: translateX(15px) translateY(-8px); }
-        }
-        @keyframes subtleGlow {
-          0%, 100% { opacity: 0.6; }
-          50% { opacity: 0.85; }
+          0%, 100% { transform: translateX(0px); }
+          50% { transform: translateX(20px); }
         }
 
         .kw-card {
-          background: rgba(38, 35, 53, 0.45);
+          background: rgba(42, 38, 58, 0.45);
           border: 1px solid rgba(255, 255, 255, 0.12);
           border-radius: 24px;
           box-shadow: 0px 12px 32px rgba(0, 0, 0, 0.25);
@@ -345,9 +361,20 @@ function StudyLedger() {
           font-family: inherit;
           appearance: none;
         }
+        .time-num-input {
+          background: rgba(0,0,0,0.25);
+          border: 1px solid rgba(255,255,255,0.2);
+          color: #FFF;
+          border-radius: 8px;
+          width: 44px;
+          padding: 4px;
+          text-align: center;
+          font-family: inherit;
+          font-weight: 700;
+        }
       `}</style>
 
-      {/* Aesthetic Liminal Pastel Mountain Background (Live Wallpaper SVG) */}
+      {/* Cute Pinterest/Canva-Style Soft Mountain Background */}
       <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none" }}>
         <svg
           style={{ width: "100%", height: "100%", objectFit: "cover" }}
@@ -355,148 +382,151 @@ function StudyLedger() {
           preserveAspectRatio="xMidYMid slice"
         >
           <defs>
-            <linearGradient id="pastelSky" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#2A2438" />
-              <stop offset="40%" stopColor="#4A3E56" />
-              <stop offset="70%" stopColor="#8C6D85" />
-              <stop offset="100%" stopColor="#D4A5A5" />
+            <linearGradient id="cuteSky" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#312B42" />
+              <stop offset="50%" stopColor="#5B486B" />
+              <stop offset="100%" stopColor="#A8829F" />
             </linearGradient>
-            <linearGradient id="mountainFar" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#6C5B7B" />
-              <stop offset="100%" stopColor="#355C7D" />
+            <linearGradient id="softMtn1" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#806282" />
+              <stop offset="100%" stopColor="#4A3B52" />
             </linearGradient>
-            <linearGradient id="mountainMid" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4A3F55" />
-              <stop offset="100%" stopColor="#2A2438" />
+            <linearGradient id="softMtn2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#55425C" />
+              <stop offset="100%" stopColor="#2E2436" />
             </linearGradient>
-            <linearGradient id="mountainNear" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#231E2E" />
-              <stop offset="100%" stopColor="#161521" />
+            <linearGradient id="softMtn3" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3B2E42" />
+              <stop offset="100%" stopColor="#1D1B26" />
             </linearGradient>
           </defs>
 
-          {/* Sky */}
-          <rect width="1000" height="1000" fill="url(#pastelSky)" />
+          {/* Sky Gradient */}
+          <rect width="1000" height="1000" fill="url(#cuteSky)" />
 
-          {/* Liminal Sun/Moon Glow */}
-          <circle cx="500" cy="420" r="140" fill="#FFE3E3" opacity="0.3" style={{ animation: "subtleGlow 8s ease-in-out infinite" }} />
-          <circle cx="500" cy="420" r="90" fill="#FFF" opacity="0.4" />
+          {/* Cute Soft Floating Clouds (No Big Circle) */}
+          <path d="M 100 250 Q 130 210 170 230 Q 210 200 250 230 Q 280 250 260 280 H 110 Z" fill="#F4E3ED" opacity="0.2" style={{ animation: "floatCloud 14s ease-in-out infinite" }} />
+          <path d="M 680 320 Q 710 280 760 300 Q 800 270 840 310 Q 870 330 850 360 H 670 Z" fill="#F4E3ED" opacity="0.25" style={{ animation: "floatCloud 18s ease-in-out infinite reverse" }} />
 
-          {/* Floating Clouds */}
-          <ellipse cx="200" cy="300" rx="120" ry="20" fill="#E8C5C8" opacity="0.25" style={{ animation: "floatCloud 12s ease-in-out infinite" }} />
-          <ellipse cx="780" cy="360" rx="160" ry="25" fill="#F8E1E7" opacity="0.2" style={{ animation: "floatCloud 16s ease-in-out infinite reverse" }} />
-
-          {/* Far Pastel Mountain Range */}
-          <polygon points="-100,1000 150,480 420,700 680,430 1100,1000" fill="url(#mountainFar)" opacity="0.8" />
-
-          {/* Mid Pastel Mountain Range */}
-          <polygon points="-50,1000 300,560 550,750 850,500 1080,1000" fill="url(#mountainMid)" opacity="0.9" />
-
-          {/* Foreground Liminal Ridges */}
-          <polygon points="-100,1000 180,680 480,1000" fill="url(#mountainNear)" />
-          <polygon points="350,1000 680,620 1100,1000" fill="url(#mountainNear)" />
+          {/* Pinterest Rounded Mountain Peaks */}
+          <path d="M -50 1000 Q 200 480 450 1000 Z" fill="url(#softMtn1)" opacity="0.85" />
+          <path d="M 300 1000 Q 600 420 880 1000 Z" fill="url(#softMtn1)" opacity="0.75" />
+          <path d="M 120 1000 Q 420 540 720 1000 Z" fill="url(#softMtn2)" />
+          <path d="M -100 1000 Q 180 620 520 1000 Z" fill="url(#softMtn3)" />
+          <path d="M 480 1000 Q 780 640 1100 1000 Z" fill="url(#softMtn3)" />
         </svg>
       </div>
 
       <div style={{ position: "relative", zIndex: 1 }}>
         
         {/* HERO SECTION */}
-        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "40px 16px", boxSizing: "border-box" }}>
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "30px 16px 40px", boxSizing: "border-box" }}>
           
-          {/* BIG LIVE ADHD POMODORO TIMER AT TOP */}
-          <div className="kw-card" style={{ width: "100%", maxWidth: 440, padding: "24px 28px", textAlign: "center", border: "1px solid rgba(255,255,255,0.2)", background: "rgba(30, 26, 42, 0.55)" }}>
+          {/* TOP SMALL LIVE CLOCK & CUSTOM POMODORO TIMER */}
+          <div style={{ width: "100%", maxWidth: 440, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
             
-            {/* Mode Selector */}
-            <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 16 }}>
-              <button
-                onClick={() => setTimerMode("work", 25)}
-                style={{
-                  background: pomoMode === "work" ? "rgba(255,255,255,0.2)" : "transparent",
-                  border: "none",
-                  color: "#FFF",
-                  borderRadius: 20,
-                  padding: "6px 14px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer"
-                }}
-              >
-                Focus 25m
-              </button>
-              <button
-                onClick={() => setTimerMode("short", 5)}
-                style={{
-                  background: pomoMode === "short" ? "rgba(255,255,255,0.2)" : "transparent",
-                  border: "none",
-                  color: "#FFF",
-                  borderRadius: 20,
-                  padding: "6px 14px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer"
-                }}
-              >
-                Short Break 5m
-              </button>
-              <button
-                onClick={() => setTimerMode("long", 15)}
-                style={{
-                  background: pomoMode === "long" ? "rgba(255,255,255,0.2)" : "transparent",
-                  border: "none",
-                  color: "#FFF",
-                  borderRadius: 20,
-                  padding: "6px 14px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer"
-                }}
-              >
-                Long Break 15m
-              </button>
+            {/* Small Live Clock (12-Hour AM/PM) */}
+            <div style={{
+              background: "rgba(0,0,0,0.3)",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 20,
+              padding: "6px 16px",
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: "0.05em",
+              color: "#F2C6DE",
+              backdropFilter: "blur(10px)"
+            }}>
+              {formatLiveClock(now)}
             </div>
 
-            {/* Timer Display */}
-            <div style={{ fontSize: 64, fontWeight: 800, letterSpacing: "0.04em", fontFamily: "monospace", textShadow: "0px 4px 20px rgba(0,0,0,0.3)", color: "#FFF" }}>
-              {formatPomoTime(pomoTime)}
-            </div>
+            {/* Main Pomodoro Card */}
+            <div className="kw-card" style={{ width: "100%", padding: "20px 24px", textAlign: "center", border: "1px solid rgba(255,255,255,0.2)", background: "rgba(30, 26, 42, 0.55)" }}>
+              
+              {/* Custom Hours & Minutes Controls */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 14 }}>
+                <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>Focus Set:</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="24"
+                  value={customHours}
+                  onChange={(e) => {
+                    const h = Math.max(0, parseInt(e.target.value || 0, 10));
+                    setCustomHours(h);
+                    applyCustomTimer(h, customMins);
+                  }}
+                  className="time-num-input"
+                />
+                <span style={{ fontSize: 11, opacity: 0.6 }}>h</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="59"
+                  value={customMins}
+                  onChange={(e) => {
+                    const m = Math.max(0, parseInt(e.target.value || 0, 10));
+                    setCustomMins(m);
+                    applyCustomTimer(customHours, m);
+                  }}
+                  className="time-num-input"
+                />
+                <span style={{ fontSize: 11, opacity: 0.6 }}>m</span>
+                <button
+                  onClick={() => {
+                    setCustomHours(0);
+                    setCustomMins(25);
+                    applyCustomTimer(0, 25);
+                  }}
+                  style={{ background: "rgba(255,255,255,0.1)", border: "none", color: "#FFF", borderRadius: 8, padding: "4px 8px", fontSize: 10, fontWeight: 700, cursor: "pointer", marginLeft: 4 }}
+                >
+                  Reset 25m
+                </button>
+              </div>
 
-            {/* Timer Controls */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 14 }}>
-              <button
-                onClick={() => setPomoActive(!pomoActive)}
-                style={{
-                  background: "#F2C6DE",
-                  color: "#161521",
-                  border: "none",
-                  borderRadius: 999,
-                  width: 48,
-                  height: 48,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  boxShadow: "0px 4px 14px rgba(242, 198, 222, 0.4)"
-                }}
-              >
-                {pomoActive ? <Pause size={20} fill="#161521" /> : <Play size={20} fill="#161521" style={{ marginLeft: 2 }} />}
-              </button>
-              <button
-                onClick={() => setTimerMode(pomoMode, pomoMode === "work" ? 25 : pomoMode === "short" ? 5 : 15)}
-                style={{
-                  background: "rgba(255,255,255,0.1)",
-                  color: "#FFF",
-                  border: "none",
-                  borderRadius: 999,
-                  width: 40,
-                  height: 40,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer"
-                }}
-              >
-                <RotateCcw size={16} />
-              </button>
+              {/* Countdown Timer Display */}
+              <div style={{ fontSize: 58, fontWeight: 800, letterSpacing: "0.04em", fontFamily: "monospace", textShadow: "0px 4px 20px rgba(0,0,0,0.3)", color: "#FFF" }}>
+                {formatPomoTime(pomoTime)}
+              </div>
+
+              {/* Timer Controls */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 12 }}>
+                <button
+                  onClick={() => setPomoActive(!pomoActive)}
+                  style={{
+                    background: "#F2C6DE",
+                    color: "#161521",
+                    border: "none",
+                    borderRadius: 999,
+                    width: 46,
+                    height: 46,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    boxShadow: "0px 4px 14px rgba(242, 198, 222, 0.4)"
+                  }}
+                >
+                  {pomoActive ? <Pause size={20} fill="#161521" /> : <Play size={20} fill="#161521" style={{ marginLeft: 2 }} />}
+                </button>
+                <button
+                  onClick={() => applyCustomTimer(customHours, customMins)}
+                  style={{
+                    background: "rgba(255,255,255,0.1)",
+                    color: "#FFF",
+                    border: "none",
+                    borderRadius: 999,
+                    width: 38,
+                    height: 38,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer"
+                  }}
+                >
+                  <RotateCcw size={16} />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -584,47 +614,59 @@ function StudyLedger() {
         }}>
           <div style={{ maxWidth: 600, margin: "0 auto" }}>
             
-            {/* Stats Grid */}
+            {/* Streak & Productivity Metrics Grid (3 Tiers) */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }}>
-              <div className="kw-card" style={{ padding: 16 }}>
+              <div className="kw-card" style={{ padding: 16, gridColumn: "span 2" }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, display: "flex", alignItems: "center", gap: 4 }}>
                   <Flame size={12} color="#E59866" /> STREAK
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{streak}d</div>
+                <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4 }}>{streak}d</div>
               </div>
-              <div className="kw-card" style={{ padding: 16 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>TODAY'S COMPLETION</div>
-                <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{overall.rate}%</div>
-              </div>
+
               <div className="kw-card" style={{ padding: 16 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MAX PRODUCTIVITY 🐢</div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "#82C99B", marginTop: 6 }}>{overall.maxProdDays}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#82C99B", marginTop: 4 }}>{overall.maxProdDays}</div>
                 <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>≥ 90% completed</div>
               </div>
+
               <div className="kw-card" style={{ padding: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>IN BETWEEN 🐧</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#F3C68F", marginTop: 4 }}>{overall.inBetweenDays}</div>
+                <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>&gt; 50% &amp; &lt; 90%</div>
+              </div>
+<div className="kw-card" style={{ padding: 16, gridColumn: "span 2" }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MIN PRODUCTIVITY 🐇</div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "#E86F88", marginTop: 6 }}>{overall.minProdDays}</div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#E86F88", marginTop: 4 }}>{overall.minProdDays}</div>
                 <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>≤ 50% completed</div>
               </div>
             </div>
 
-            {/* Climb Progress Bar */}
+            {/* Climb Progress Bar with Rate of Completion directly under Climber Emoji */}
             <div className="kw-card" style={{ padding: 18, marginBottom: 20 }}>
-              <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 20 }}>TODAY'S CLIMB</div>
-              <div style={{ position: "relative", height: 18, background: "rgba(20, 18, 30, 0.6)", borderRadius: 999, border: "1.5px solid rgba(255,255,255,0.15)" }}>
+              <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 24 }}>TODAY'S CLIMB</div>
+              <div style={{ position: "relative", height: 18, background: "rgba(20, 18, 30, 0.6)", borderRadius: 999, border: "1.5px solid rgba(255,255,255,0.15)", marginBottom: 28 }}>
                 <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${climberPct}%`, background: "#F2C6DE", borderRadius: 999, transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1)" }}>
+                  
                   {climberPct === 100 ? (
                     <div style={{ position: "absolute", right: -10, top: -16, fontSize: 22 }}>🚩</div>
                   ) : (
-                    <div style={{ position: "absolute", right: -12, top: -16, fontSize: 22, zIndex: 2 }}>🧗🏻‍♀️</div>
+                    <div style={{ position: "absolute", right: -12, top: -16, fontSize: 22, zIndex: 2 }}>
+                      🧗🏻‍♀️
+                      {/* Live Completion Rate under Climber */}
+                      <div style={{ fontSize: 11, fontWeight: 800, color: "#F2C6DE", textAlign: "center", position: "absolute", top: 24, left: "50%", transform: "translateX(-50%)", whiteSpace: "nowrap" }}>
+                        {overall.rate}%
+                      </div>
+                    </div>
                   )}
+
                 </div>
                 {climberPct < 100 && (
                   <div style={{ position: "absolute", right: 2, top: -16, fontSize: 22, opacity: 0.8, zIndex: 1 }}>🏔️</div>
                 )}
               </div>
             </div>
- {/* Last 14 Days Navigation */}
+
+            {/* Last 14 Days Navigation */}
             <div className="kw-card" style={{ padding: 16, marginBottom: 20 }}>
               <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 14 }}>LAST 14 DAYS</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(14, 1fr)", gap: 4 }}>
@@ -756,7 +798,8 @@ function StudyLedger() {
                 </div>
               ))}
             </div>
-<div style={{ textAlign: "center", fontSize: 12, opacity: 0.5, fontStyle: "italic" }}>
+
+            <div style={{ textAlign: "center", fontSize: 12, opacity: 0.5, fontStyle: "italic" }}>
               "a climber only fails when he stops climbing" ~ Mori
             </div>
           </div>
