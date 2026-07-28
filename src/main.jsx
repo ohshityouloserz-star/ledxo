@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import ReactDOM from "react-dom/client";
-import { Check, X, Plus, ChevronLeft, ChevronRight, Flame, Settings2, Trash2, Clock, ChevronDown } from "lucide-react";
+import { Check, X, Plus, ChevronLeft, ChevronRight, Flame, Settings2, Trash2, Clock, Maximize2, Minimize2 } from "lucide-react";
 
 if (!window.storage) {
   window.storage = {
@@ -19,7 +19,7 @@ if (!window.storage) {
 }
 
 const FONT_IMPORT =
-  "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');";
+  "@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');";
 
 function toKey(date) {
   const y = date.getFullYear();
@@ -55,17 +55,13 @@ for (let i = 0; i < 24; i++) {
   }
 }
 
-const TONE_SVG =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='8' height='8'><circle cx='1.4' cy='1.4' r='1.1' fill='%23211F33' opacity='0.5'/></svg>`
-  );
-
 function StudyLedger() {
   const [viewDate, setViewDate] = useState(new Date());
   const [targetsByDay, setTargetsByDay] = useState({});
   const [examConfig, setExamConfig] = useState({ name: "", date: "", dailyMinimum: 1 });
   const [notes, setNotes] = useState("");
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [crossedDates, setCrossedDates] = useState({});
   const [showSettings, setShowSettings] = useState(false);
   const [newTaskText, setNewTaskText] = useState("");
   const [newStart, setNewStart] = useState("");
@@ -78,15 +74,12 @@ function StudyLedger() {
     return () => clearInterval(id);
   }, []);
 
-  const today = new Date();
+  const today = useMemo(() => new Date(), [now.toDateString()]);
   const viewKey = toKey(viewDate);
   const isToday = isSameDay(viewDate, today);
 
-  // Time calculation for day/night background change (4 PM to 3 AM is Night)
   const currentHour = now.getHours();
   const isNight = currentHour >= 16 || currentHour < 3;
-  
-  // Format to 12-hour AM/PM clock
   const displayTime = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
 
   useEffect(() => {
@@ -102,6 +95,12 @@ function StudyLedger() {
         const notesRes = await window.storage.get("notes").catch(() => null);
         if (!cancelled && notesRes && typeof notesRes.value === "string") {
           setNotes(notesRes.value);
+        }
+      } catch (e) {}
+      try {
+        const crossedRes = await window.storage.get("crossed-dates").catch(() => null);
+        if (!cancelled && crossedRes && crossedRes.value) {
+          setCrossedDates(JSON.parse(crossedRes.value));
         }
       } catch (e) {}
       try {
@@ -147,6 +146,14 @@ function StudyLedger() {
     try {
       await window.storage.set("notes", text);
     } catch (e) {}
+  }, []);
+
+  const toggleCrossDate = useCallback(async (key) => {
+    setCrossedDates((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      window.storage.set("crossed-dates", JSON.stringify(next)).catch(() => {});
+      return next;
+    });
   }, []);
 
   const currentTasks = targetsByDay[viewKey] || [];
@@ -215,78 +222,95 @@ function StudyLedger() {
     return days;
   }, [targetsByDay, today]);
 
+  // Productivity Metrics Calculation
   const overall = useMemo(() => {
-    let total = 0, achieved = 0, missed = 0, maxProdDays = 0, minProdDays = 0, loggedDays = 0;
+    let maxProdDays = 0, minProdDays = 0;
+
     Object.entries(targetsByDay).forEach(([key, tasks]) => {
       if (!tasks || tasks.length === 0) return;
       if (fromKey(key) > today) return;
-      loggedDays += 1;
-      
+
       const dayTotal = tasks.length;
       const dayAchieved = tasks.filter((t) => t.status === "achieved").length;
-      const uncompleted = dayTotal - dayAchieved; // Exactly how many are pending
+      const uncompleted = dayTotal - dayAchieved;
 
-      tasks.forEach((t) => {
-        total += 1;
-        if (t.status === "achieved") achieved += 1;
-        if (t.status === "missed") missed += 1;
-      });
-
-      // Minimum productivity 🐇: at least half complete (50%+)
-      if (dayTotal > 0 && (dayAchieved / dayTotal) >= 0.5) {
-        minProdDays += 1;
-      }
-
-      // Maximum productivity 🐢: exactly 1, 2, or 3 tasks pending
-      if (dayTotal > 0 && uncompleted >= 1 && uncompleted <= 3) {
+      // 1. Max Productivity: Exactly 1, 2, or 3 tasks pending
+      if (uncompleted >= 1 && uncompleted <= 3) {
         maxProdDays += 1;
+      } 
+      // 2. Min Productivity: <=50% completed AND not qualifying for Max Productivity
+      else if (dayTotal > 0 && (dayAchieved / dayTotal) <= 0.5) {
+        minProdDays += 1;
       }
     });
 
+    // Todays completion rate ONLY
+    const todayKey = toKey(today);
+    const todaysTasks = targetsByDay[todayKey] || [];
+    const todayTotal = todaysTasks.length;
+    const todayAchieved = todaysTasks.filter((t) => t.status === "achieved").length;
+    const todayRate = todayTotal ? Math.round((todayAchieved / todayTotal) * 100) : 0;
+
     return {
-      total, achieved, missed,
-      rate: total ? Math.round((achieved / total) * 100) : 0,
-      maxProdDays, minProdDays, loggedDays,
+      rate: todayRate,
+      maxProdDays,
+      minProdDays,
     };
   }, [targetsByDay, today]);
 
   const climberPct = Math.min(100, Math.max(0, overall.rate));
 
+  // Calendar Grid Generation
+  const calendarDays = useMemo(() => {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const days = [];
+    const startDayOfWeek = startOfMonth.getDay();
+
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(null);
+    }
+    for (let d = 1; d <= endOfMonth.getDate(); d++) {
+      const date = new Date(now.getFullYear(), now.getMonth(), d);
+      days.push(date);
+    }
+    return days;
+  }, [now]);
+
   return (
     <div style={{
       fontFamily: "'Plus Jakarta Sans', sans-serif",
-      backgroundColor: isNight ? "#12101A" : "#D4C5ED",
+      backgroundColor: "#0D0C12",
       minHeight: "100vh",
-      color: isNight ? "#F0EDF6" : "#211F33",
+      color: "#F0EDF6",
       position: "relative",
       overflowX: "hidden",
-      scrollBehavior: "smooth"
     }}>
       <style>{`
         ${FONT_IMPORT}
-        body { margin: 0; padding: 0; }
+        body { margin: 0; padding: 0; background: #0D0C12; }
         .kw-card {
-          background: ${isNight ? "rgba(40, 37, 59, 0.7)" : "rgba(247, 245, 252, 0.7)"};
-          border: 2px solid ${isNight ? "#484360" : "#211F33"};
+          background: rgba(28, 26, 40, 0.75);
+          border: 2px solid #3D3852;
           border-radius: 20px;
-          box-shadow: 4px 4px 0px ${isNight ? "rgba(18, 16, 26, 0.8)" : "rgba(33, 31, 51, 0.8)"};
-          backdrop-filter: blur(8px);
+          box-shadow: 4px 4px 0px rgba(10, 8, 15, 0.9);
+          backdrop-filter: blur(12px);
         }
         .kw-input {
-          background: ${isNight ? "rgba(31, 29, 43, 0.8)" : "rgba(237, 232, 245, 0.8)"};
-          border: 2px solid ${isNight ? "#484360" : "#211F33"};
+          background: rgba(20, 18, 30, 0.85);
+          border: 2px solid #3D3852;
           border-radius: 12px;
-          padding: 10px 14px;
-          color: ${isNight ? "#FFF" : "#211F33"};
+          padding: 12px 16px;
+          color: #FFF;
           font-family: inherit;
         }
-        .kw-input::placeholder { color: ${isNight ? "#787293" : "#8F8AA8"}; }
+        .kw-input::placeholder { color: #787293; }
         .kw-select {
-          background: ${isNight ? "rgba(31, 29, 43, 0.8)" : "rgba(237, 232, 245, 0.8)"};
-          border: 2px solid ${isNight ? "#484360" : "#211F33"};
+          background: rgba(20, 18, 30, 0.85);
+          border: 2px solid #3D3852;
           border-radius: 10px;
           padding: 6px 10px;
-          color: ${isNight ? "#FFF" : "#211F33"};
+          color: #FFF;
           font-family: inherit;
           appearance: none;
           background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238F8AA8' stroke-width='2'><path d='m6 9 6 6 6-6'/></svg>");
@@ -299,55 +323,49 @@ function StudyLedger() {
           50%, 95% { transform: rotate(180deg); }
           100% { transform: rotate(360deg); }
         }
-        @keyframes bounceScroll {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(10px); }
-        }
         .hg-animated {
           display: inline-block;
           animation: flipHourglass 4s infinite ease-in-out;
         }
-        .bounce-icon {
-          animation: bounceScroll 2s infinite ease-in-out;
-        }
       `}</style>
 
-      {/* Dramatic Manga-Inspired Full Screen Fixed Background */}
+      {/* Manga-Inspired High-Contrast Mountain Hero SVG Background */}
       <svg
         aria-hidden="true"
-        style={{ position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", zIndex: 0, objectFit: "cover", transition: "all 1s ease" }}
+        style={{ position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", zIndex: 0, objectFit: "cover", pointerEvents: "none" }}
         viewBox="0 0 1000 1000"
         preserveAspectRatio="xMidYMax slice"
       >
-        <defs>
-          <pattern id="tone" width="8" height="8" patternUnits="userSpaceOnUse">
-            <image href={TONE_SVG} width="8" height="8" />
-          </pattern>
-        </defs>
-        <rect width="1000" height="1000" fill={isNight ? "#1C1A27" : "#E5E1EE"} />
-        <polygon points="-100,600 200,250 450,550 700,100 1100,600 1100,1000 -100,1000" fill={isNight ? "#2C2742" : "#7E779A"} opacity="0.4" />
-        <polygon points="-50,750 300,400 550,600 850,250 1100,650 1100,1000 -50,1000" fill={isNight ? "#181524" : "#3D3854"} />
-        <polygon points="-50,750 300,400 550,600 850,250 1100,650 1100,1000 -50,1000" fill="url(#tone)" opacity="0.4" />
-        <polygon points="-100,900 150,600 350,750 600,450 850,750 1100,500 1100,1000 -100,1000" fill={isNight ? "#0D0B14" : "#211F33"} />
+        <rect width="1000" height="1000" fill="#0A090F" />
+        {/* Giant Monolith Mountain Face */}
+        <polygon points="200,1000 350,150 700,200 850,1000" fill="#181622" />
+        <polygon points="350,150 500,180 480,1000 200,1000" fill="#242133" />
+        {/* Ridge Line Highlights & Manga Shading Lines */}
+        <line x1="350" y1="150" x2="480" y2="1000" stroke="#484360" strokeWidth="3" />
+        <line x1="500" y1="180" x2="700" y2="1000" stroke="#12101A" strokeWidth="4" />
+        {/* Foreground Crags */}
+        <polygon points="-50,1000 250,650 400,1000" fill="#100F17" />
+        <polygon points="650,1000 800,550 1050,1000" fill="#0D0C13" />
+        {/* Climber Silhouette */}
+        <path d="M 240,680 Q 245,670 250,675 L 255,695 L 245,710 Z" fill="#FFF" />
+        <circle cx="248" cy="668" r="4" fill="#FFF" />
       </svg>
 
       <div style={{ position: "relative", zIndex: 1 }}>
         
-        {/* 100vh Hero Screen (Just Timer & Scroll indicator) */}
-        <div style={{ height: "100vh", display: "flex", flexDirection: "column", padding: "24px 16px", boxSizing: "border-box" }}>
-          <div style={{ width: "100%", maxWidth: 600, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div className="kw-card" style={{ padding: "8px 16px", display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 700 }}>
-              <span className="hg-animated">⏳</span>
-              <span>{displayTime}</span>
-            </div>
-            <button onClick={() => setShowSettings((s) => !s)} className="kw-card" style={{ padding: "10px", cursor: "pointer", display: "flex", alignItems: "center" }}>
+        {/* HERO SECTION: Large Aesthetic Timer + Minimalist Manga Calendar */}
+        <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "space-between", padding: "32px 16px 48px", boxSizing: "border-box" }}>
+          
+          {/* Header Controls */}
+          <div style={{ width: "100%", maxWidth: 600, display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={() => setShowSettings((s) => !s)} className="kw-card" style={{ padding: "10px", cursor: "pointer", display: "flex", alignItems: "center", color: "#FFF" }}>
               <Settings2 size={18} />
             </button>
           </div>
 
-          {/* Settings Panel (Pops over hero if active) */}
+          {/* Settings Panel */}
           {showSettings && (
-            <div className="kw-card" style={{ maxWidth: 600, width: "100%", margin: "20px auto 0", padding: 18 }}>
+            <div className="kw-card" style={{ maxWidth: 600, width: "100%", padding: 18, margin: "10px 0" }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Exam Settings</div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <input
@@ -372,23 +390,70 @@ function StudyLedger() {
             </div>
           )}
 
-          <div style={{ flex: 1 }} />
-          
-          <div style={{ textAlign: "center", paddingBottom: 40, opacity: 0.8, color: isNight ? "#D4C5ED" : "#FFF", textShadow: "0px 2px 4px rgba(0,0,0,0.5)" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.1em", marginBottom: 8 }}>SCROLL TO CLIMB</div>
-            <div className="bounce-icon"><ChevronDown size={32} margin="0 auto" /></div>
+          {/* Aesthetic Large Live Clock */}
+          <div className="kw-card" style={{ padding: "14px 28px", borderRadius: 999, display: "flex", alignItems: "center", gap: 12, border: "2px solid rgba(255,255,255,0.2)", boxShadow: "0px 8px 32px rgba(0,0,0,0.8)" }}>
+            <span className="hg-animated" style={{ fontSize: 22 }}>⏳</span>
+            <span style={{ fontSize: 26, fontWeight: 800, letterSpacing: "0.05em", color: "#FFF" }}>{displayTime}</span>
           </div>
+
+          {/* Minimalist Interactive Hero Calendar */}
+          <div className="kw-card" style={{ width: "100%", maxWidth: 360, padding: 20, margin: "20px 0" }}>
+            <div style={{ textAlign: "center", fontWeight: 800, fontSize: 14, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16, color: "#D4C5ED" }}>
+              {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, textAlign: "center", fontSize: 10, fontWeight: 700, opacity: 0.5, marginBottom: 8 }}>
+              <span>SU</span><span>MO</span><span>TU</span><span>WE</span><span>TH</span><span>FR</span><span>SA</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+              {calendarDays.map((d, idx) => {
+                if (!d) return <div key={`pad-${idx}`} />;
+                const key = toKey(d);
+                const isPast = d < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                const isCrossed = crossedDates[key] || (isPast && crossedDates[key] !== false);
+                const isTodayDate = isSameDay(d, today);
+
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleCrossDate(key)}
+                    style={{
+                      aspectRatio: "1/1",
+                      background: isTodayDate ? "#D4C5ED" : "rgba(255,255,255,0.05)",
+                      color: isTodayDate ? "#12101A" : "#FFF",
+                      border: isTodayDate ? "2px solid #FFF" : "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 8,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      position: "relative",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: 0
+                    }}
+                  >
+                    {d.getDate()}
+                    {isCrossed && (
+                      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#D95D75", fontSize: 16, fontWeight: 900 }}>✕</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ fontSize: 11, opacity: 0.5, letterSpacing: "0.1em" }}>• SCROLL FOR LEDGER •</div>
         </div>
 
-        {/* Scrollable Main Application Window */}
+        {/* Scrollable Main Dashboard */}
         <div style={{
-          background: isNight ? "rgba(22, 20, 31, 0.8)" : "rgba(229, 225, 238, 0.75)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-          borderTop: `2px solid ${isNight ? "#484360" : "#211F33"}`,
+          background: "rgba(13, 12, 18, 0.88)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderTop: "2px solid #3D3852",
           minHeight: "100vh",
           padding: "40px 16px 80px",
-          boxShadow: "0px -10px 40px rgba(0,0,0,0.3)"
+          boxShadow: "0px -10px 40px rgba(0,0,0,0.8)"
         }}>
           <div style={{ maxWidth: 600, margin: "0 auto" }}>
             
@@ -401,7 +466,7 @@ function StudyLedger() {
                 <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{streak}d</div>
               </div>
               <div className="kw-card" style={{ padding: 16 }}>
-                <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>COMPLETION</div>
+                <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>TODAY'S COMPLETION</div>
                 <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6 }}>{overall.rate}%</div>
               </div>
               <div className="kw-card" style={{ padding: 16 }}>
@@ -412,27 +477,21 @@ function StudyLedger() {
               <div className="kw-card" style={{ padding: 16 }}>
                 <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7 }}>MIN PRODUCTIVITY 🐇</div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: "#D95D75", marginTop: 6 }}>{overall.minProdDays}</div>
-                <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>≥50% completed</div>
+                <div style={{ fontSize: 10, opacity: 0.6, marginTop: 2 }}>≤50% completed</div>
               </div>
             </div>
 
-            {/* Climb Progress Bar */}
+            {/* Climb Progress Bar (Today Only) */}
             <div className="kw-card" style={{ padding: 18, marginBottom: 20 }}>
-              <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 20 }}>YOUR CLIMB</div>
-              <div style={{ position: "relative", height: 18, background: isNight ? "rgba(31, 29, 43, 0.8)" : "rgba(237, 232, 245, 0.8)", borderRadius: 999, border: `2px solid ${isNight ? "#484360" : "#211F33"}` }}>
-                
-                {/* The Filled Progress Line */}
+              <div style={{ fontSize: 10, letterSpacing: "0.05em", fontWeight: 700, opacity: 0.7, marginBottom: 20 }}>TODAY'S CLIMB</div>
+              <div style={{ position: "relative", height: 18, background: "rgba(20, 18, 30, 0.85)", borderRadius: 999, border: "2px solid #3D3852" }}>
                 <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${climberPct}%`, background: "#D4C5ED", borderRadius: 999, transition: "width 0.8s cubic-bezier(0.4, 0, 0.2, 1)" }}>
-                  
-                  {/* Climber / Flag anchored to the exact right edge of the fill */}
                   {climberPct === 100 ? (
-                    <div style={{ position: "absolute", right: -10, top: -16, fontSize: 22, textShadow: "2px 2px 0px rgba(0,0,0,0.2)" }}>🚩</div>
+                    <div style={{ position: "absolute", right: -10, top: -16, fontSize: 22 }}>🚩</div>
                   ) : (
                     <div style={{ position: "absolute", right: -12, top: -16, fontSize: 22, zIndex: 2 }}>🧗🏻‍♀️</div>
-                  )}
+                )}
                 </div>
-
-                {/* The Mountain Summit fixed at the far right */}
                 {climberPct < 100 && (
                   <div style={{ position: "absolute", right: 2, top: -16, fontSize: 22, opacity: 0.8, zIndex: 1 }}>🏔️</div>
                 )}
@@ -453,9 +512,9 @@ function StudyLedger() {
                       key={d.key}
                       onClick={() => setViewDate(fromKey(d.key))}
                       style={{
-                        background: isSelected ? (isNight ? "#FFF" : "#211F33") : (isNight ? "rgba(31, 29, 43, 0.8)" : "rgba(237, 232, 245, 0.8)"),
-                        color: isSelected ? (isNight ? "#211F33" : "#FFF") : (isNight ? "#FFF" : "#211F33"),
-                        border: `1.5px solid ${isNight ? "#484360" : "#211F33"}`,
+                        background: isSelected ? "#FFF" : "rgba(20, 18, 30, 0.85)",
+                        color: isSelected ? "#12101A" : "#FFF",
+                        border: "1.5px solid #3D3852",
                         borderRadius: 6,
                         height: 28,
                         width: "100%",
@@ -465,8 +524,7 @@ function StudyLedger() {
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        padding: 0,
-                        boxShadow: isSelected ? "1px 1px 0px rgba(0,0,0,0.3)" : "none"
+                        padding: 0
                       }}
                     >
                       {d.date.getDate()}
@@ -476,17 +534,15 @@ function StudyLedger() {
               </div>
             </div>
 
-            {/* Notes Section */}
-            <div className="kw-card" style={{ padding: 16, marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7, marginBottom: 8 }}>Notes</div>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                onBlur={() => saveNotes(notes)}
-                placeholder="Add quick notes or reminders here..."
-                rows={2}
-                style={{ width: "100%", background: "transparent", border: "none", outline: "none", resize: "none", color: "inherit", fontFamily: "inherit", fontSize: 13, lineHeight: "1.5" }}
-              />
+            {/* Notes Section Card (Triggers Modal Pop-Up) */}
+            <div className="kw-card" style={{ padding: 16, marginBottom: 20, cursor: "pointer" }} onClick={() => setShowNotesModal(true)}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.7 }}>Notes</div>
+                <Maximize2 size={14} opacity={0.6} />
+              </div>
+              <div style={{ fontSize: 13, opacity: notes ? 0.9 : 0.4, whiteSpace: "pre-wrap", maxHeight: 50, overflow: "hidden" }}>
+                {notes || "Click to expand notes view..."}
+              </div>
             </div>
 
             {/* Current Day Header */}
@@ -547,25 +603,26 @@ function StudyLedger() {
               </div>
             </div>
 
-            {/* Task List */}
+            {/* Task List with Auto-Numbering */}
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 30 }}>
-              {currentTasks.map((t) => (
+              {currentTasks.map((t, index) => (
                 <div key={t.id} className="kw-card" style={{ padding: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <button
                       onClick={() => setStatus(t.id, "achieved")}
-                      style={{ background: t.status === "achieved" ? "#489A6A" : "transparent", border: `2px solid ${isNight ? "#FFF" : "#211F33"}`, borderRadius: 8, width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                      style={{ background: t.status === "achieved" ? "#489A6A" : "transparent", border: "2px solid #FFF", borderRadius: 8, width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                     >
                       {t.status === "achieved" && <Check size={16} color="#FFF" />}
                     </button>
                     <button
                       onClick={() => setStatus(t.id, "missed")}
-                      style={{ background: t.status === "missed" ? "#D95D75" : "transparent", border: `2px solid ${isNight ? "#FFF" : "#211F33"}`, borderRadius: 8, width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                      style={{ background: t.status === "missed" ? "#D95D75" : "transparent", border: "2px solid #FFF", borderRadius: 8, width: 24, height: 24, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
                     >
                       {t.status === "missed" && <X size={16} color="#FFF" />}
                     </button>
                     <div>
-                      <div style={{ fontSize: 15, fontWeight: 500, textDecoration: t.status === "achieved" ? "line-through" : "none", opacity: t.status === "achieved" ? 0.6 : 1 }}>
+                      <div style={{ fontSize: 15, fontWeight: 600, textDecoration: t.status === "achieved" ? "line-through" : "none", opacity: t.status === "achieved" ? 0.6 : 1 }}>
+                        <span style={{ opacity: 0.5, marginRight: 6 }}>{index + 1}.</span>
                         {t.text}
                       </div>
                       {(t.start || t.end) && (
@@ -590,6 +647,27 @@ function StudyLedger() {
           </div>
         </div>
       </div>
+
+      {/* Expanded Notes Full-Screen Modal Pop-Up */}
+      {showNotesModal && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "rgba(10, 9, 15, 0.85)", backdropFilter: "blur(12px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div className="kw-card" style={{ width: "100%", maxWidth: 600, height: "80vh", display: "flex", flexDirection: "column", padding: 24, boxShadow: "0px 20px 50px rgba(0,0,0,0.9)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>Notes</div>
+              <button onClick={() => setShowNotesModal(false)} style={{ background: "none", border: "none", color: "#FFF", cursor: "pointer" }}>
+                <Minimize2 size={20} />
+              </button>
+            </div>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={() => saveNotes(notes)}
+              placeholder="Write your study notes, thoughts, or goals here..."
+              style={{ flex: 1, background: "transparent", border: "none", outline: "none", resize: "none", color: "#FFF", fontFamily: "inherit", fontSize: 15, lineHeight: 1.6 }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
